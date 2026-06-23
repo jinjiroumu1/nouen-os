@@ -1,0 +1,23 @@
+# 環境変数・秘密情報
+.env
+.env.*
+
+# 仮想環境
+.venv/
+venv/
+env/
+
+# データベース（本番データはGitで管理しない）
+db/*.db
+
+# Python キャッシュ
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db
