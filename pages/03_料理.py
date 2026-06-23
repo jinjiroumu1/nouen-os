@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from db.database import get_connection
 from components.knowledge_card import knowledge_card
+from utils.notion_sync import save_recipe
 
 st.set_page_config(page_title="料理", page_icon="🍳", layout="wide")
 st.title("🍳 料理")
@@ -39,7 +40,8 @@ with st.expander("📝 レシピを記録する", expanded=True):
             )
             conn.commit()
             conn.close()
-            st.success("記録しました。")
+            save_recipe(recipe_name, vegetable, ingredients, season, notes, source_type)
+            st.success("記録しました。（Notionにも同期）")
             st.rerun()
 
 st.markdown("---")

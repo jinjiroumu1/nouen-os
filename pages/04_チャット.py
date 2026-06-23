@@ -1,6 +1,7 @@
 import streamlit as st
 from db.database import get_connection
 from components.knowledge_card import knowledge_card
+from utils.notion_sync import save_chat_log
 
 st.set_page_config(page_title="チャット", page_icon="💬", layout="wide")
 st.title("💬 チャット（AI−勘ちゃん）")
@@ -37,7 +38,8 @@ with st.form("chat_form"):
         )
         conn.commit()
         conn.close()
-        st.success("記録しました。")
+        save_chat_log(question, answer, related_topics, source_type)
+        st.success("記録しました。（Notionにも同期）")
         st.rerun()
 
 # ── 記録一覧 ───────────────────────────────────────────────

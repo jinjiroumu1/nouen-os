@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from db.database import get_connection
 from components.knowledge_card import knowledge_card
+from utils.notion_sync import save_cultivation_plan
 
 st.set_page_config(page_title="栽培計画", page_icon="📅", layout="wide")
 st.title("📅 栽培計画")
@@ -42,7 +43,9 @@ with st.expander("📝 栽培計画を追加する", expanded=True):
             )
             conn.commit()
             conn.close()
-            st.success("追加しました。")
+            save_cultivation_plan(month, crop, sowing_date, planting_date, harvest_period,
+                                  companion_plants, required_materials, source_type)
+            st.success("追加しました。（Notionにも同期）")
             st.rerun()
 
 st.markdown("---")

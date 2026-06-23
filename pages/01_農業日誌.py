@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import date
 from db.database import get_connection
 from components.knowledge_card import knowledge_card
+from utils.notion_sync import save_farm_diary
 
 st.set_page_config(page_title="農業日誌", page_icon="🌿", layout="wide")
 st.title("🌿 農業日誌")
@@ -42,7 +43,8 @@ with st.expander("📝 新しい日誌を書く", expanded=True):
             )
             conn.commit()
             conn.close()
-            st.success("記録しました。")
+            save_farm_diary(entry_date, weather, crop, work_done, observation, question, hypothesis, source_type)
+            st.success("記録しました。（Notionにも同期）")
             st.rerun()
 
 # ── 一覧表示 ──────────────────────────────────────────────
