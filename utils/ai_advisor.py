@@ -396,3 +396,77 @@ def get_node_explanation(node_label: str) -> str:
         messages=[{"role": "user", "content": prompt}],
     )
     return response.content[0].text
+
+
+# ── ネットワーク図：Notionデータ全体からノード・エッジ自動生成 ──
+@st.cache_data(ttl=1800)
+def build_network_from_notion() -> dict:
+    """
+    Notionのカンパニーブレイン構想内の全データを読み込み、
+    AIがノードとエッジを抽出して返す。30分キャッシュ。
+    """
+    import json
+
+    diary       = _fetch_db_records(DIARY_DB_ID, limit=30)
+    cultivation = _fetch_db_records(CULTIVATION_DB_ID, limit=30)
+    recipe      = _fetch_db_records(RECIPE_DB_ID, limit=30)
+    chat        = _fetch_db_records(CHAT_DB_ID, limit=30)
+    notion_pages = fetch_page_tree(DIARY_PAGE_ID, "農業日誌ページ")
+
+    all_text = f"""【農業日誌】
+{diary}
+
+【栽培計画】
+{cultivation}
+
+【料理記録】
+{recipe}
+
+【チャット・対話記録】
+{chat}
+
+【Notionページ記録】
+{notion_pages[:2000]}
+"""
+
+    client = _claude()
+    if not client:
+        return {"nodes": [], "edges": []}
+
+    prompt = f"""われまち農縁団の記録から、概念のネットワーク図を作ってください。
+
+【記録】
+{all_text[:4000]}
+
+【抽出ルール】
+- 記録に実際に登場した概念だけをノード化する
+- 書籍・PDF全体はノード化しない
+- 重要な概念を20〜40個程度抽出する
+- 色分け：
+  - souhatsuchi（pink）：現場・実感・農縁団のメンバーの発言から出た概念
+  - kenjinchi（blue）：賢人知・専門知識・基本書から出た概念
+  - kasanatta（purple）：両方が重なった概念
+  - suuchi（gray）：数値・収穫量・原価・会計データ
+
+以下のJSON形式のみで返してください（説明文不要）：
+{{
+  "nodes": [
+    {{"label": "概念名", "source_type": "souhatsuchi|kenjinchi|kasanatta|suuchi"}}
+  ],
+  "edges": [
+    {{"from_node": "概念A", "to_node": "概念B", "relationship": "関係の説明"}}
+  ]
+}}"""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = response.content[0].text.strip()
+    try:
+        start = text.find("{")
+        end   = text.rfind("}") + 1
+        return json.loads(text[start:end])
+    except Exception:
+        return {"nodes": [], "edges": []}
