@@ -116,14 +116,13 @@ def _fetch_db_records(db_id, keyword_prop=None, keyword="", limit=6):
     if not notion:
         return "（記録未取得）"
     try:
-        params = {
-            "database_id": db_id,
+        query_params = {
             "page_size": limit,
             "sorts": [{"timestamp": "created_time", "direction": "descending"}],
         }
         if keyword and keyword_prop:
-            params["filter"] = {"property": keyword_prop, "rich_text": {"contains": keyword}}
-        results = notion.databases.query(**params)
+            query_params["filter"] = {"property": keyword_prop, "rich_text": {"contains": keyword}}
+        results = notion.databases.query(db_id, **query_params)
         entries = []
         for page in results.get("results", []):
             props = page.get("properties", {})
