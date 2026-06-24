@@ -34,8 +34,17 @@ st.markdown("---")
 
 # ── デバッグ：Notionから取得できているか確認 ─────────────
 with st.expander("🔧 デバッグ：Notionから取得したデータ（確認用）"):
-    recipe_raw = _fetch_db_records(RECIPE_DB_ID, limit=30)
-    st.text(recipe_raw)
+    from notion_client import Client
+    import streamlit as st_inner
+    try:
+        token = st.secrets.get("NOTION_TOKEN", "")
+        nc = Client(auth=token)
+        st.text(f"notion type: {type(nc)}")
+        st.text(f"databases type: {type(nc.databases)}")
+        res = nc.databases.query(database_id=RECIPE_DB_ID, page_size=3)
+        st.text(f"OK: {len(res.get('results',[]))} 件取得")
+    except Exception as e:
+        st.text(f"エラー: {e}")
 
 # ── Notionデータから自動生成 ───────────────────────────────
 with st.spinner("Notionの記録を読み込んで、知恵の地図を生成しています…"):
