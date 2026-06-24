@@ -34,8 +34,6 @@ st.markdown("---")
 
 # ── デバッグ：Notionから取得できているか確認 ─────────────
 with st.expander("🔧 デバッグ：Notionから取得したデータ（確認用）"):
-    import notion_client as nc_module
-    st.text(f"notion-client version: {nc_module.__version__}")
     recipe_raw = _fetch_db_records(RECIPE_DB_ID, limit=5)
     st.text(recipe_raw)
 
