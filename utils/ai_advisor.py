@@ -413,19 +413,19 @@ def build_network_from_notion() -> dict:
     notion_pages = fetch_page_tree(DIARY_PAGE_ID, "農業日誌ページ")
 
     all_text = f"""【農業日誌】
-{diary}
+{diary[:1500]}
 
 【栽培計画】
-{cultivation}
+{cultivation[:1000]}
 
 【料理記録】
-{recipe}
+{recipe[:1500]}
 
 【チャット・対話記録】
-{chat}
+{chat[:1000]}
 
 【Notionページ記録】
-{notion_pages[:2000]}
+{notion_pages[:1000]}
 """
 
     client = _claude()
@@ -435,7 +435,7 @@ def build_network_from_notion() -> dict:
     prompt = f"""われまち農縁団の記録から、概念のネットワーク図を作ってください。
 
 【記録】
-{all_text[:4000]}
+{all_text}
 
 【抽出ルール】
 - 記録に実際に登場した語句・固有名詞・料理名・野菜名・作物名・行動をそのままノード化する
