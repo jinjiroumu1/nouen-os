@@ -18,6 +18,13 @@ CHAT_DB_ID           = "fdd51460926141c2b2ce0b36adf474c2"
 MAX_TURNS = 3
 _TEXT_LIMIT = 3000   # 1ページあたりの最大文字数
 
+SOURCE_TYPE_LABEL = {
+    "souhatsuchi": "🌸創発知",
+    "kenjinchi":   "💙賢人知",
+    "kasanatta":   "💜重なった知",
+    "suuchi":      "🩶数値データ",
+}
+
 
 def _notion():
     token = st.secrets.get("NOTION_TOKEN", "")
@@ -265,3 +272,127 @@ def get_ai_response_chat(entry: dict, chat_history: list) -> str:
         f"関連トピック：{entry.get('related_topics','')}",
     ])
     return _call_claude(system, f"質問があります。\n\n{first}", chat_history)
+
+
+# ── ネットワーク図：自由チャット ──────────────────────────
+def get_ai_response_network(question: str, chat_history: list) -> str:
+    """ネットワーク図用の自由チャット。回答後にノード抽出を行う。"""
+    kenjin    = fetch_page_tree(KENJIN_PAGE_ID, "賢人コーナー")
+    past_diary = _fetch_db_records(DIARY_DB_ID, limit=5)
+    past_chat  = _fetch_db_records(CHAT_DB_ID, limit=5)
+    past = f"【日誌DB】\n{past_diary}\n\n【チャットDB】\n{past_chat}"
+
+    system = f"""あなたは「AI勘ちゃん」——われまち農縁団の伴走者です。
+
+質問に対して、基本書「ぐうたら農法」・賢人コーナー・農縁団の記録を参照して答えてください。
+回答は簡潔に、わかりやすく。
+
+【賢人コーナー】
+{kenjin[:1500]}
+
+【農縁団の記録】
+{past[:1500]}
+"""
+    messages = [{"role": "user", "content": question}] + chat_history
+    client = _claude()
+    if not client:
+        return "⚠️ ANTHROPIC_API_KEY が必要です。"
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=800,
+        system=system,
+        messages=messages,
+    )
+    return response.content[0].text
+
+
+# ── ネットワーク図：ノード・エッジ抽出 ───────────────────
+def extract_nodes_and_edges(question: str, answer: str) -> dict:
+    """
+    会話（question + answer）から概念を抽出し、
+    ノード候補・エッジ候補をJSONで返す。
+    """
+    import json
+    client = _claude()
+    if not client:
+        return {"nodes": [], "edges": []}
+
+    prompt = f"""以下の会話からノードとエッジを抽出してください。
+
+【会話】
+Q: {question}
+A: {answer}
+
+【ルール】
+- 会話に実際に登場した概念だけをノード化する
+- 書籍・PDF全体をノード化しない
+- 色分け：
+  - souhatsuchi（pink）：現場・実感・仲間の発言から出た概念
+  - kenjinchi（blue）：賢人知・基本書・専門知識から出た概念
+  - kasanatta（purple）：両方が重なった概念
+  - suuchi（gray）：数値・会計・収穫量など
+
+以下のJSON形式のみで返してください（説明文は不要）：
+{{
+  "nodes": [
+    {{"label": "概念名", "source_type": "souhatsuchi|kenjinchi|kasanatta|suuchi"}}
+  ],
+  "edges": [
+    {{"from_node": "概念A", "to_node": "概念B", "relationship": "関係の説明"}}
+  ]
+}}"""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=600,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = response.content[0].text.strip()
+    try:
+        start = text.find("{")
+        end   = text.rfind("}") + 1
+        return json.loads(text[start:end])
+    except Exception:
+        return {"nodes": [], "edges": []}
+
+
+# ── ネットワーク図：ノード解説（過去の会話を検索） ────────
+def get_node_explanation(node_label: str) -> str:
+    """指定したノードに関する過去の会話・記録を検索して解説する。"""
+    notion = _notion()
+    client = _claude()
+    if not client:
+        return "⚠️ ANTHROPIC_API_KEY が必要です。"
+
+    # Notionの各DBから関連記録を検索
+    related = []
+    for db_id, name in [
+        (DIARY_DB_ID, "農業日誌"),
+        (CHAT_DB_ID, "チャット"),
+        (RECIPE_DB_ID, "料理"),
+        (CULTIVATION_DB_ID, "栽培計画"),
+    ]:
+        records = _fetch_db_records(db_id, limit=20)
+        # node_labelを含む記録だけ絞り込む
+        lines = [line for line in records.split("\n") if node_label in line]
+        if lines:
+            related.append(f"【{name}】\n" + "\n".join(lines[:5]))
+
+    context = "\n\n".join(related) if related else "（関連する記録が見つかりませんでした）"
+
+    prompt = f"""われまち農縁団の記録の中で「{node_label}」に関してどんな会話・記録がありましたか？
+
+【関連記録】
+{context}
+
+以下の形式で簡潔にまとめてください：
+- 農縁団でどんな文脈で登場したか
+- 関連する気づき・仮説があれば
+- 今後深めると良いこと（あれば）"""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=600,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text
