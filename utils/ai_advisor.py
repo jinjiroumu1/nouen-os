@@ -399,7 +399,6 @@ def get_node_explanation(node_label: str) -> str:
 
 
 # ── ネットワーク図：Notionデータ全体からノード・エッジ自動生成 ──
-@st.cache_data(ttl=1800)
 def build_network_from_notion() -> dict:
     """
     Notionのカンパニーブレイン構想内の全データを読み込み、

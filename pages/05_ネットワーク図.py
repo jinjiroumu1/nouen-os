@@ -5,6 +5,8 @@ from utils.ai_advisor import (
     get_node_explanation,
     get_ai_response_network,
     SOURCE_TYPE_LABEL,
+    _fetch_db_records,
+    RECIPE_DB_ID,
 )
 
 st.set_page_config(page_title="ネットワーク図", page_icon="🕸️", layout="wide")
@@ -29,6 +31,11 @@ if st.button("🔄 図を更新する（Notionから再取得）"):
     st.rerun()
 
 st.markdown("---")
+
+# ── デバッグ：Notionから取得できているか確認 ─────────────
+with st.expander("🔧 デバッグ：Notionから取得したデータ（確認用）"):
+    recipe_raw = _fetch_db_records(RECIPE_DB_ID, limit=30)
+    st.text(recipe_raw)
 
 # ── Notionデータから自動生成 ───────────────────────────────
 with st.spinner("Notionの記録を読み込んで、知恵の地図を生成しています…"):
