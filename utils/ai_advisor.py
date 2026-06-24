@@ -469,5 +469,5 @@ def build_network_from_notion() -> dict:
         start = text.find("{")
         end   = text.rfind("}") + 1
         return json.loads(text[start:end])
-    except Exception:
-        return {"nodes": [], "edges": []}
+    except Exception as e:
+        return {"nodes": [], "edges": [], "_debug": f"JSON解析エラー: {e}\n原文: {text[:300]}"}
