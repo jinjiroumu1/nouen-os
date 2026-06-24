@@ -465,6 +465,10 @@ def build_network_from_notion() -> dict:
         messages=[{"role": "user", "content": prompt}],
     )
     text = response.content[0].text.strip()
+    # コードブロック（```json ... ```）を除去
+    if "```" in text:
+        text = text.split("```")[-2] if text.count("```") >= 2 else text
+        text = text.lstrip("json").strip()
     try:
         start = text.find("{")
         end   = text.rfind("}") + 1

@@ -124,25 +124,65 @@ if st.session_state.diary_entry:
         st.session_state.ai_responses  = []
         st.rerun()
 
-# ── 過去の日誌一覧 ────────────────────────────────────────
+# ── 過去の日誌一覧（NotionDB から取得）────────────────────
 st.markdown("---")
 st.subheader("過去の日誌")
 
+from utils.ai_advisor import _fetch_db_records, _notion, DIARY_DB_ID
+
+@st.cache_data(ttl=60)
+def _load_diary_from_notion():
+    notion = _notion()
+    if not notion:
+        return []
+    try:
+        res = notion.databases.query(
+            database_id=DIARY_DB_ID,
+            page_size=50,
+            sorts=[{"timestamp": "created_time", "direction": "descending"}],
+        )
+        rows = []
+        for page in res.get("results", []):
+            props = page.get("properties", {})
+            def txt(key):
+                p = props.get(key, {})
+                t = p.get("type", "")
+                if t == "title":
+                    return "".join(r.get("plain_text","") for r in p.get("title",[]))
+                if t == "rich_text":
+                    return "".join(r.get("plain_text","") for r in p.get("rich_text",[]))
+                if t == "select":
+                    return (p.get("select") or {}).get("name","")
+                return ""
+            rows.append({
+                "title":       txt("タイトル"),
+                "crop":        txt("作物"),
+                "work_done":   txt("作業内容"),
+                "observation": txt("観察"),
+                "hypothesis":  txt("仮説"),
+                "question":    txt("疑問"),
+                "source_type": txt("知識の種別") or "souhatsuchi",
+            })
+        return rows
+    except Exception as e:
+        st.warning(f"Notionから日誌を取得できませんでした: {e}")
+        return []
+
+notion_rows = _load_diary_from_notion()
+
+# SQLiteにもあれば合わせて表示
 conn = get_connection()
-rows = conn.execute("SELECT * FROM farm_diary ORDER BY date DESC, id DESC").fetchall()
+sqlite_rows = [dict(r) for r in conn.execute("SELECT * FROM farm_diary ORDER BY date DESC, id DESC").fetchall()]
 conn.close()
 
-if not rows:
+all_rows = notion_rows if notion_rows else sqlite_rows
+
+if not all_rows:
     st.info("まだ日誌がありません。上のフォームから記録を始めましょう。")
 else:
     search = st.text_input("🔍 絞り込み（作物・作業・気づき）")
-    df = pd.DataFrame([dict(r) for r in rows])
-    if search:
-        mask = df.apply(lambda row: row.astype(str).str.contains(search, case=False).any(), axis=1)
-        df = df[mask]
-
-    for _, row in df.iterrows():
-        title = f"{row['date']} ／ {row['weather']} ／ {row['crop'] or '—'}"
+    for row in all_rows:
+        title = row.get("title") or f"{row.get('date','')} ／ {row.get('crop','—')}"
         body_parts = []
         if row.get("work_done"):
             body_parts.append(f"【作業】{row['work_done']}")
@@ -152,4 +192,6 @@ else:
             body_parts.append(f"【疑問】{row['question']}")
         if row.get("hypothesis"):
             body_parts.append(f"【仮説】{row['hypothesis']}")
+        if search and search not in str(row.values()):
+            continue
         knowledge_card(title, "\n".join(body_parts), row.get("source_type", "souhatsuchi"))
