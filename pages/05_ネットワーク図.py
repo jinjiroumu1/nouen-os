@@ -32,7 +32,11 @@ if st.button("🔄 図を更新する（Notionから再取得）"):
 
 st.markdown("---")
 
-# ── デバッグ：Notionから取得できているか確認 ─────────────
+# ── Notionデータから自動生成 ───────────────────────────────
+with st.spinner("Notionの記録を読み込んで、知恵の地図を生成しています…"):
+    network = build_network_from_notion()
+
+# ── デバッグ：取得結果を確認 ──────────────────────────────
 with st.expander("🔧 デバッグ：Notionから取得したデータ（確認用）"):
     recipe_raw = _fetch_db_records(RECIPE_DB_ID, limit=5)
     st.text(recipe_raw)
@@ -41,10 +45,6 @@ with st.expander("🔧 デバッグ：Notionから取得したデータ（確認
     st.text(f"network edges数: {len(network.get('edges', []))}")
     if "_debug" in network:
         st.text(network["_debug"])
-
-# ── Notionデータから自動生成 ───────────────────────────────
-with st.spinner("Notionの記録を読み込んで、知恵の地図を生成しています…"):
-    network = build_network_from_notion()
 
 nodes = network.get("nodes", [])
 edges = network.get("edges", [])
