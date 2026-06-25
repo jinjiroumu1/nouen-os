@@ -195,7 +195,7 @@ def _base_system(kenjin, past, role_desc):
 """
 
 
-def _call_claude(system, first_message, chat_history, use_books=True):
+def _call_claude(system, first_message, chat_history, use_books=True, extra_pdfs=None):
     client = _claude()
     if not client:
         return (
@@ -220,6 +220,19 @@ def _call_claude(system, first_message, chat_history, use_books=True):
             }
             for b in books
         ]
+
+    # 追加PDF（請求書など）
+    if extra_pdfs:
+        for b in extra_pdfs:
+            pdf_blocks.append({
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": b["data"],
+                },
+                "title": b["name"],
+            })
 
     # スプレッドシートデータをシステムプロンプトに追加
     from utils.sheets_loader import load_sheets
@@ -322,26 +335,34 @@ def get_ai_response_chat(entry: dict, chat_history: list) -> str:
 
 # ── 会計・原価管理 ─────────────────────────────────────────
 def get_ai_response_accounting(question: str, chat_history: list) -> str:
-    """会計・原価・販売データを参照してAI勘ちゃんが回答する。"""
+    """会計・原価・販売データ・請求書PDFを参照してAI勘ちゃんが回答する。"""
     from utils.sheets_loader import load_sheets
+    from utils.invoice_loader import load_invoices
     sheets_text = load_sheets()
+    invoices = load_invoices()
+
+    invoice_note = ""
+    if invoices:
+        names = "、".join(b["name"] for b in invoices)
+        invoice_note = f"\n\n【請求書PDF（{len(invoices)}件）】\n{names}"
 
     system = f"""あなたは「AI勘ちゃん」——われまち農縁団の会計・原価管理アドバイザーです。
 
 【役割】
-原価計算・販売データ・支払い状況を具体的な数値とともに分析し、
+原価計算・販売データ・支払い状況・請求書を具体的な数値とともに分析し、
 農縁団の経営改善に役立つアドバイスをします。
 
 【参照データ】
-{sheets_text[:4000] if sheets_text else "（スプレッドシートが未設定です）"}
+{sheets_text[:4000] if sheets_text else "（スプレッドシートが未設定です）"}{invoice_note}
 
 【回答のルール】
 - 数値データを具体的に引用して回答する
 - 原価率・利益率など計算が必要な場合は計算過程も示す
+- 請求書PDFの内容も参照して回答する
 - データがない場合は「データが見つかりません」と正直に伝える
 - 改善提案は具体的・実践的に
 """
-    return _call_claude(system, question, chat_history, use_books=False)
+    return _call_claude(system, question, chat_history, use_books=False, extra_pdfs=invoices)
 
 
 # ── ネットワーク図：自由チャット ──────────────────────────

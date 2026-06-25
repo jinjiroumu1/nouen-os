@@ -1,6 +1,7 @@
 import streamlit as st
 from utils.ai_advisor import get_ai_response_accounting
 from utils.sheets_loader import load_sheets
+from utils.invoice_loader import load_invoices
 
 st.set_page_config(page_title="会計・原価管理", page_icon="💰", layout="wide")
 from pathlib import Path as _P
@@ -20,6 +21,18 @@ with st.expander("📊 読み込み中のスプレッドシートデータ"):
             "スプレッドシートが未設定です。\n"
             "Streamlit Cloud の Secrets に以下を追加してください：\n"
             "SHEET_COST / SHEET_PANDA / SHEET_IKIKI / SHEET_PAYMENT"
+        )
+
+with st.expander("📄 読み込み中の請求書PDF"):
+    invoices = load_invoices()
+    if invoices:
+        for inv in invoices:
+            st.markdown(f"- {inv['name']}")
+    else:
+        st.info(
+            "請求書PDFが見つかりません。\n"
+            "Streamlit Cloud の Secrets に `INVOICE_FOLDER_ID` を追加し、\n"
+            "Google Drive フォルダをサービスアカウントと共有してください。"
         )
 
 st.markdown("---")
