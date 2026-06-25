@@ -149,13 +149,20 @@ def _fetch_db_records(db_id, keyword_prop=None, keyword="", limit=6):
 
 # ── システムプロンプト共通 ────────────────────────────────
 def _base_system(kenjin, past, role_desc):
-    # PDFが設定されていれば「基本書PDFを参照」と明示、なければ従来の記述
     from utils.book_loader import load_books
     pdf_files = load_books()
     if pdf_files:
-        book_note = "① 添付された基本書・参考書PDF（実際の内容を参照）"
+        book_list = "\n".join(f"  - 『{b['name'].replace('.pdf','')}』" for b in pdf_files)
+        book_note = f"① 添付された基本書・参考書PDF（各資料を区別して参照）\n{book_list}"
+        pdf_section = """
+【参照資料について】
+- 各資料はファイル名で区別してください
+- 回答時は必ず「資料名『○○』によれば」と明記してください
+- 異なる資料の内容を混同しないでください
+"""
     else:
         book_note = "① 基本書「ぐうたら農法」（西村和雄著）の考え方・哲学"
+        pdf_section = ""
 
     return f"""あなたは「AI勘ちゃん」——われまち農縁団の伴走者です。
 
@@ -166,10 +173,10 @@ def _base_system(kenjin, past, role_desc):
 {book_note}
 ② 賢人コーナーの知識（下記参照）
 ③ われまち農縁団の過去の記録・子ページ（下記参照）
-
+{pdf_section}
 【回答形式】必ず以下4つに分けて回答してください：
 【創発知】現場の気づき・問いへのコメント（現場を尊重する）
-【賢人知】基本書・賢人コーナーからの引用や知恵
+【賢人知】基本書・賢人コーナーからの引用や知恵（資料名を明記）
 【響き合う仮説】創発知と賢人知が響き合って生まれた仮説
 【次に試すこと】具体的な提案を1〜3つ
 
