@@ -149,13 +149,21 @@ def _fetch_db_records(db_id, keyword_prop=None, keyword="", limit=6):
 
 # ── システムプロンプト共通 ────────────────────────────────
 def _base_system(kenjin, past, role_desc):
+    # PDFが設定されていれば「基本書PDFを参照」と明示、なければ従来の記述
+    from utils.book_loader import list_pdf_files
+    pdf_files = list_pdf_files()
+    if pdf_files:
+        book_note = "① 添付された基本書・参考書PDF（実際の内容を参照）"
+    else:
+        book_note = "① 基本書「ぐうたら農法」（西村和雄著）の考え方・哲学"
+
     return f"""あなたは「AI勘ちゃん」——われまち農縁団の伴走者です。
 
 【役割】
 {role_desc}
 
 【参照優先順位】
-① 基本書「ぐうたら農法」（西村和雄著）の考え方・哲学
+{book_note}
 ② 賢人コーナーの知識（下記参照）
 ③ われまち農縁団の過去の記録・子ページ（下記参照）
 
@@ -187,7 +195,18 @@ def _call_claude(system, first_message, chat_history):
             "⚠️ AI勘ちゃんを使うには `ANTHROPIC_API_KEY` の設定が必要です。\n"
             "Streamlit Cloud の Secrets に追加してください。"
         )
-    messages = [{"role": "user", "content": first_message}] + chat_history
+
+    # PDFブロックを取得（Google Drive未設定の場合は空リスト）
+    from utils.book_loader import get_pdf_document_blocks
+    pdf_blocks = get_pdf_document_blocks()
+
+    # 最初のメッセージにPDFブロックを付加
+    if pdf_blocks:
+        first_content = pdf_blocks + [{"type": "text", "text": first_message}]
+    else:
+        first_content = first_message
+
+    messages = [{"role": "user", "content": first_content}] + chat_history
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1200,
