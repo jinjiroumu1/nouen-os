@@ -320,7 +320,7 @@ def get_ai_response_chat(entry: dict, chat_history: list) -> str:
     return _call_claude(system, f"質問があります。\n\n{first}", chat_history)
 
 
-# ── 会計・原価管理 ────────────────────────────────────────
+# ── 会計・原価管理 ─────────────────────────────────────────
 def get_ai_response_accounting(question: str, chat_history: list) -> str:
     """会計・原価・販売データを参照してAI勘ちゃんが回答する。"""
     from utils.sheets_loader import load_sheets
