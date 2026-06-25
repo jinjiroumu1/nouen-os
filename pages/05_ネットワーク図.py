@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.mermaid import render_mermaid
+from utils.mermaid import render_mermaid, _node_id, _escape_label, _escape_edge
 from utils.ai_advisor import (
     build_network_from_notion,
     get_node_explanation,
@@ -55,26 +55,25 @@ else:
     # ── Mermaidコード生成 ─────────────────────────────────
     lines = ["graph LR"]
     for n in nodes:
-        label   = n["label"].replace('"', "").replace("'", "")
-        node_id = (label.replace(" ", "_").replace("・", "_")
-                        .replace("、", "_").replace("（", "_").replace("）", "_"))
+        label = n["label"]
+        nid   = _node_id(label)
         fill  = COLOR_MAP.get(n.get("source_type", "souhatsuchi"), "#a8d5a2")
         color = TEXT_COLOR.get(n.get("source_type", "souhatsuchi"), "#1b4332")
-        lines.append(f'    {node_id}["{label}"]')
-        lines.append(f'    style {node_id} fill:{fill},stroke:#388e3c,color:{color}')
+        lines.append(f'    {nid}["{_escape_label(label)}"]')
+        lines.append(f'    style {nid} fill:{fill},stroke:#388e3c,color:{color}')
 
     for e in edges:
-        f_id = (e["from_node"].replace(" ", "_").replace("・", "_")
-                              .replace("、", "_").replace("（", "_").replace("）", "_"))
-        t_id = (e["to_node"].replace(" ", "_").replace("・", "_")
-                            .replace("、", "_").replace("（", "_").replace("）", "_"))
-        rel  = e.get("relationship", "")
+        f_id = _node_id(e["from_node"])
+        t_id = _node_id(e["to_node"])
+        rel  = _escape_edge(e.get("relationship", ""))
         if rel:
             lines.append(f'    {f_id} -->|"{rel}"| {t_id}')
         else:
             lines.append(f'    {f_id} --> {t_id}')
 
     mermaid_code = "\n".join(lines)
+    with st.expander("🔍 Mermaidコード（デバッグ用）", expanded=False):
+        st.code(mermaid_code, language="text")
     render_mermaid(mermaid_code)
 
     # 凡例
