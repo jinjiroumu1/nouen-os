@@ -84,15 +84,17 @@ else:
                 font={"size": 14},
             )
 
+        node_ids = [n["label"] for n in nodes]
         for e in edges:
-            net.add_edge(
-                e["from_node"],
-                e["to_node"],
-                title=e.get("relationship", ""),
-                label=e.get("relationship", ""),
-                font={"size": 10, "align": "middle"},
-                arrows="to",
-            )
+            if e["from_node"] in node_ids and e["to_node"] in node_ids:
+                net.add_edge(
+                    e["from_node"],
+                    e["to_node"],
+                    title=e.get("relationship", ""),
+                    label=e.get("relationship", ""),
+                    font={"size": 10, "align": "middle"},
+                    arrows="to",
+                )
 
         html_str = net.generate_html()
         components.html(html_str, height=620, scrolling=False)
