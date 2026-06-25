@@ -4,3 +4,4 @@ notion-client==2.2.1
 anthropic>=0.40.0
 google-auth>=2.0.0
 google-api-python-client>=2.0.0
+pyvis>=0.3.2
