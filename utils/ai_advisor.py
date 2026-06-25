@@ -320,6 +320,30 @@ def get_ai_response_chat(entry: dict, chat_history: list) -> str:
     return _call_claude(system, f"質問があります。\n\n{first}", chat_history)
 
 
+# ── 会計・原価管理 ────────────────────────────────────────
+def get_ai_response_accounting(question: str, chat_history: list) -> str:
+    """会計・原価・販売データを参照してAI勘ちゃんが回答する。"""
+    from utils.sheets_loader import load_sheets
+    sheets_text = load_sheets()
+
+    system = f"""あなたは「AI勘ちゃん」——われまち農縁団の会計・原価管理アドバイザーです。
+
+【役割】
+原価計算・販売データ・支払い状況を具体的な数値とともに分析し、
+農縁団の経営改善に役立つアドバイスをします。
+
+【参照データ】
+{sheets_text[:4000] if sheets_text else "（スプレッドシートが未設定です）"}
+
+【回答のルール】
+- 数値データを具体的に引用して回答する
+- 原価率・利益率など計算が必要な場合は計算過程も示す
+- データがない場合は「データが見つかりません」と正直に伝える
+- 改善提案は具体的・実践的に
+"""
+    return _call_claude(system, question, chat_history, use_books=False)
+
+
 # ── ネットワーク図：自由チャット ──────────────────────────
 def get_ai_response_network(question: str, chat_history: list) -> str:
     """ネットワーク図用の自由チャット。回答後にノード抽出を行う。"""
