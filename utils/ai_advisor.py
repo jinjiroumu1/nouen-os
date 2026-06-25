@@ -221,6 +221,12 @@ def _call_claude(system, first_message, chat_history, use_books=True):
             for b in books
         ]
 
+    # スプレッドシートデータをシステムプロンプトに追加
+    from utils.sheets_loader import load_sheets
+    sheets_text = load_sheets()
+    if sheets_text:
+        system = system + f"\n\n【販売・原価データ（スプレッドシート）】\n{sheets_text[:3000]}"
+
     # 最初のメッセージにPDFブロックを付加
     if pdf_blocks:
         first_content = pdf_blocks + [{"type": "text", "text": first_message}]
