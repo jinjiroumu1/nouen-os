@@ -21,3 +21,6 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# PDFファイル（Google Drive経由で読み込むため不要）
+*.pdf
