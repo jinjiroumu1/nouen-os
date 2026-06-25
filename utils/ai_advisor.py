@@ -195,7 +195,7 @@ def _base_system(kenjin, past, role_desc):
 """
 
 
-def _call_claude(system, first_message, chat_history):
+def _call_claude(system, first_message, chat_history, use_books=True):
     client = _claude()
     if not client:
         return (
@@ -203,21 +203,23 @@ def _call_claude(system, first_message, chat_history):
             "Streamlit Cloud の Secrets に追加してください。"
         )
 
-    # PDFブロックを取得（Google Drive未設定の場合は空リスト）
-    from utils.book_loader import load_books
-    books = load_books()
-    pdf_blocks = [
-        {
-            "type": "document",
-            "source": {
-                "type": "base64",
-                "media_type": "application/pdf",
-                "data": b["data"],
-            },
-            "title": b["name"],
-        }
-        for b in books
-    ]
+    # PDFブロックを取得（use_books=False の場合はスキップ）
+    pdf_blocks = []
+    if use_books:
+        from utils.book_loader import load_books
+        books = load_books()
+        pdf_blocks = [
+            {
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": b["data"],
+                },
+                "title": b["name"],
+            }
+            for b in books
+        ]
 
     # 最初のメッセージにPDFブロックを付加
     if pdf_blocks:
@@ -497,6 +499,7 @@ def build_network_from_notion() -> dict:
   ]
 }}"""
 
+    # PDFは渡さない（Notionデータのみでノード抽出）
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=4000,
