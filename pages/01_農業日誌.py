@@ -7,6 +7,10 @@ from utils.notion_sync import save_farm_diary
 from utils.ai_advisor import get_ai_response, MAX_TURNS
 
 st.set_page_config(page_title="農業日誌", page_icon="🌿", layout="wide")
+from pathlib import Path as _P
+_img = _P("docs/characters/tsurezure.png")
+if _img.exists():
+    st.sidebar.image(str(_img), width=150)
 st.title("🌿 農業日誌")
 st.caption("共同体の記憶を記録する。天候・作業・気づきをここに。")
 

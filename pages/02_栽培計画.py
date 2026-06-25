@@ -6,6 +6,10 @@ from utils.notion_sync import save_cultivation_plan
 from utils.ai_advisor import get_ai_response_cultivation, MAX_TURNS
 
 st.set_page_config(page_title="栽培計画", page_icon="📅", layout="wide")
+from pathlib import Path as _P
+_img = _P("docs/characters/pop.png")
+if _img.exists():
+    st.sidebar.image(str(_img), width=150)
 st.title("📅 栽培計画")
 st.caption("季節・育てやすさ・コンパニオンプランツを考慮して計画する。")
 

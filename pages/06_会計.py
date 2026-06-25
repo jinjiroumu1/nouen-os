@@ -3,6 +3,10 @@ from utils.ai_advisor import get_ai_response_accounting
 from utils.sheets_loader import load_sheets
 
 st.set_page_config(page_title="会計・原価管理", page_icon="💰", layout="wide")
+from pathlib import Path as _P
+_img = _P("docs/characters/price.png")
+if _img.exists():
+    st.sidebar.image(str(_img), width=150)
 st.title("💰 会計・原価管理")
 st.caption("販売・原価・支払いをAI勘ちゃんと一緒に確認する")
 

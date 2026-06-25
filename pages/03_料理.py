@@ -6,6 +6,10 @@ from utils.notion_sync import save_recipe
 from utils.ai_advisor import get_ai_response_recipe, MAX_TURNS
 
 st.set_page_config(page_title="料理", page_icon="🍳", layout="wide")
+from pathlib import Path as _P
+_img = _P("docs/characters/midori.png")
+if _img.exists():
+    st.sidebar.image(str(_img), width=150)
 st.title("🍳 料理")
 st.caption("畑の延長。収穫物から旬・保存性・原価率を考えてレシピを記録する。")
 

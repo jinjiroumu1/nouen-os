@@ -10,6 +10,10 @@ from utils.ai_advisor import (
 )
 
 st.set_page_config(page_title="ネットワーク図", page_icon="🕸️", layout="wide")
+from pathlib import Path as _P
+_img = _P("docs/characters/ninja.png")
+if _img.exists():
+    st.sidebar.image(str(_img), width=150)
 st.title("🕸️ ネットワーク図")
 st.caption("われまち農縁団の対話と行動から生まれた概念の地図　🌸創発知 💙賢人知 💜重なった知 🩶数値")
 

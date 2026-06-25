@@ -5,6 +5,10 @@ from utils.notion_sync import save_chat_log
 from utils.ai_advisor import get_ai_response_chat, MAX_TURNS
 
 st.set_page_config(page_title="チャット", page_icon="💬", layout="wide")
+from pathlib import Path as _P
+_img = _P("docs/characters/otogi.png")
+if _img.exists():
+    st.sidebar.image(str(_img), width=150)
 st.title("💬 チャット（AI−勘ちゃん）")
 st.caption("日々の疑問を投げかける。基本書→賢人→農縁団の記録から一緒に考える。")
 
