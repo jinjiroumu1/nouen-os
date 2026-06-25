@@ -4,18 +4,18 @@ from db.database import init_db
 init_db()
 
 st.set_page_config(
-    page_title="われまち農縁団OS",
-    page_icon="🌱",
+    page_title="田心ジンジャー",
+    page_icon="🫚",
     layout="wide",
 )
 
-st.title("🌱 われまち農縁団OS")
+st.title("🫚 田心ジンジャー")
 st.markdown("---")
 
 st.markdown("""
 ### 育てる。食べる。学ぶ。記録する。循環する。
 
-AI−勘ちゃんは、われまち農縁団の記憶をつなぐ伴走者です。
+AI−勘ちゃんは、田心ジンジャーの記憶をつなぐ伴走者です。
 
 ---
 
@@ -28,6 +28,7 @@ AI−勘ちゃんは、われまち農縁団の記憶をつなぐ伴走者です
 | 🍳 料理 | 収穫物からレシピを記録・探す |
 | 💬 チャット | 日々の疑問をAI勘ちゃんと対話する |
 | 🕸️ ネットワーク図 | 知識のつながりを可視化する |
+| 💰 会計・原価管理 | 販売・原価・支払いをAI勘ちゃんと確認する |
 """)
 
 st.markdown("---")
