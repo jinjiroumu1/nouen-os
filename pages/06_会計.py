@@ -11,40 +11,13 @@ if _img.exists():
 st.title("💰 会計・原価管理")
 st.caption("販売・原価・支払いをAI勘ちゃんと一緒に確認する")
 
-# ── スプレッドシートデータ確認 ────────────────────────────
-with st.expander("📊 読み込み中のスプレッドシートデータ"):
-    sheets_text = load_sheets()
-    if sheets_text:
-        st.text(sheets_text[:2000])
-    else:
-        st.info(
-            "スプレッドシートが未設定です。\n"
-            "Streamlit Cloud の Secrets に以下を追加してください：\n"
-            "SHEET_COST / SHEET_PANDA / SHEET_IKIKI / SHEET_PAYMENT"
-        )
-
-with st.expander("📄 読み込み中の請求書PDF"):
-    invoices = load_invoices()
-    if invoices:
-        for inv in invoices:
-            st.markdown(f"- {inv['name']}")
-    else:
-        st.info(
-            "請求書PDFが見つかりません。\n"
-            "Streamlit Cloud の Secrets に `INVOICE_FOLDER_ID` を追加し、\n"
-            "Google Drive フォルダをサービスアカウントと共有してください。"
-        )
-
-st.markdown("---")
-
-# ── チャット ──────────────────────────────────────────────
+# ── チャット（一番上）────────────────────────────────────
 st.subheader("💬 AI勘ちゃんに質問する")
-st.caption("原価・売上・支払いについて何でも聞いてください。スプレッドシートのデータをもとに回答します。")
+st.caption("原価・売上・支払い・請求書について何でも聞いてください。")
 
 if "accounting_chat" not in st.session_state:
     st.session_state.accounting_chat = []
 
-# 過去の対話を表示
 for msg in st.session_state.accounting_chat:
     avatar = "👨‍🌾" if msg["role"] == "user" else "🌱"
     with st.chat_message(msg["role"], avatar=avatar):
@@ -70,3 +43,30 @@ if user_input:
 if st.session_state.accounting_chat and st.button("チャットをリセット"):
     st.session_state.accounting_chat = []
     st.rerun()
+
+st.markdown("---")
+
+# ── スプレッドシートデータ確認 ────────────────────────────
+with st.expander("📊 読み込み中のスプレッドシートデータ"):
+    sheets_text = load_sheets()
+    if sheets_text:
+        st.text(sheets_text[:2000])
+    else:
+        st.info(
+            "スプレッドシートが未設定です。\n"
+            "Streamlit Cloud の Secrets に以下を追加してください：\n"
+            "SHEET_COST / SHEET_PANDA / SHEET_IKIKI / SHEET_PAYMENT"
+        )
+
+# ── 請求書PDF確認 ─────────────────────────────────────────
+with st.expander("📄 読み込み中の請求書PDF（デバッグ）"):
+    invoices, debug_lines = load_invoices()
+    if invoices:
+        st.success(f"{len(invoices)} 件の請求書PDFを読み込みました")
+        for inv in invoices:
+            st.markdown(f"- {inv['name']}")
+    else:
+        st.warning("請求書PDFが見つかりませんでした")
+    st.markdown("**取得ログ：**")
+    for line in debug_lines:
+        st.text(line)

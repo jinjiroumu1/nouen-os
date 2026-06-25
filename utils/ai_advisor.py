@@ -339,7 +339,7 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
     from utils.sheets_loader import load_sheets
     from utils.invoice_loader import load_invoices
     sheets_text = load_sheets()
-    invoices = load_invoices()
+    invoices, _ = load_invoices()
 
     invoice_note = ""
     if invoices:

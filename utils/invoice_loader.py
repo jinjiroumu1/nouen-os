@@ -12,20 +12,19 @@ def _drive_service():
 
         sa_json = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
         if not sa_json:
-            return None
+            return None, "GOOGLE_SERVICE_ACCOUNT_JSON が未設定"
         sa_info = json.loads(sa_json)
         creds = Credentials.from_service_account_info(
             sa_info,
             scopes=["https://www.googleapis.com/auth/drive.readonly"],
         )
-        return build("drive", "v3", credentials=creds)
-    except Exception:
-        return None
+        return build("drive", "v3", credentials=creds), None
+    except Exception as e:
+        return None, f"Drive認証エラー: {e}"
 
 
 def _extract_year_month(text: str) -> tuple[int, int] | None:
-    """文字列から年月を抽出する。例: '2025請求書', '2025_05', '202504' など。"""
-    # YYYY-MM または YYYY_MM または YYYYMM または YYYY年MM月
+    """文字列から年月を抽出する。"""
     patterns = [
         r'(\d{4})[_\-年](\d{1,2})[月_\-]?',
         r'(\d{4})(\d{2})(?!\d)',
@@ -36,7 +35,6 @@ def _extract_year_month(text: str) -> tuple[int, int] | None:
             year, month = int(m.group(1)), int(m.group(2))
             if 2000 <= year <= 2099 and 1 <= month <= 12:
                 return year, month
-    # 年のみ（YYYY）
     m = re.search(r'(\d{4})', text)
     if m:
         year = int(m.group(1))
@@ -46,7 +44,6 @@ def _extract_year_month(text: str) -> tuple[int, int] | None:
 
 
 def _is_recent(year: int, month: int | None, cutoff: datetime) -> bool:
-    """年月が cutoff 以降かどうか判定する。月不明の場合は年で判定。"""
     if month is None:
         return year >= cutoff.year
     dt = datetime(year, month, 1, tzinfo=timezone.utc)
@@ -54,7 +51,6 @@ def _is_recent(year: int, month: int | None, cutoff: datetime) -> bool:
 
 
 def _list_pdfs_in_folder(service, folder_id: str) -> list[dict]:
-    """指定フォルダ直下のPDFファイル一覧（id, name, modifiedTime）を返す。"""
     try:
         result = service.files().list(
             q=f"'{folder_id}' in parents and mimeType='application/pdf' and trashed=false",
@@ -62,12 +58,11 @@ def _list_pdfs_in_folder(service, folder_id: str) -> list[dict]:
             pageSize=100,
         ).execute()
         return result.get("files", [])
-    except Exception:
+    except Exception as e:
         return []
 
 
 def _list_subfolders(service, folder_id: str) -> list[dict]:
-    """指定フォルダ直下のサブフォルダ一覧を返す。"""
     try:
         result = service.files().list(
             q=f"'{folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
@@ -80,7 +75,6 @@ def _list_subfolders(service, folder_id: str) -> list[dict]:
 
 
 def _download_pdf(service, file_id: str) -> str | None:
-    """PDFをダウンロードしてbase64文字列で返す。失敗時はNone。"""
     try:
         from googleapiclient.http import MediaIoBaseDownload
         import io
@@ -96,61 +90,82 @@ def _download_pdf(service, file_id: str) -> str | None:
         return None
 
 
-def _should_include(file: dict, folder_name: str, cutoff: datetime) -> bool:
-    """ファイル名・フォルダ名・更新日時で直近3ヶ月判定する。"""
-    # ファイル名から年月を抽出
+def _should_include(file: dict, folder_name: str, cutoff: datetime) -> tuple[bool, str]:
+    """直近3ヶ月判定。(含める?, 判定理由) を返す。"""
     ym = _extract_year_month(file["name"])
     if ym:
-        return _is_recent(ym[0], ym[1], cutoff)
+        result = _is_recent(ym[0], ym[1], cutoff)
+        return result, f"ファイル名から {ym[0]}/{ym[1]} を抽出"
 
-    # フォルダ名から年月を抽出
     ym = _extract_year_month(folder_name)
     if ym:
-        return _is_recent(ym[0], ym[1], cutoff)
+        result = _is_recent(ym[0], ym[1], cutoff)
+        return result, f"フォルダ名から {ym[0]}/{ym[1]} を抽出"
 
-    # 更新日時で判定
     modified = file.get("modifiedTime", "")
     if modified:
         try:
             dt = datetime.fromisoformat(modified.replace("Z", "+00:00"))
-            return dt >= cutoff
+            result = dt >= cutoff
+            return result, f"更新日時 {modified[:10]} で判定"
         except Exception:
             pass
 
-    return True  # 判定不能な場合は含める
+    return True, "判定不能のため含める"
 
 
 @st.cache_data(ttl=1800)
-def load_invoices() -> list[dict]:
+def load_invoices() -> tuple[list[dict], list[str]]:
     """
     INVOICE_FOLDER_ID フォルダ内のPDFを再帰的（2段階）に取得。
     直近3ヶ月分に絞り込んでbase64エンコードで返す。
-    返り値: [{"name": "ファイル名", "data": "base64文字列"}, ...]
+    返り値: (invoices, debug_lines)
     """
+    debug = []
     folder_id = st.secrets.get("INVOICE_FOLDER_ID", "")
     if not folder_id:
-        return []
+        return [], ["INVOICE_FOLDER_ID が未設定です"]
 
-    service = _drive_service()
+    debug.append(f"INVOICE_FOLDER_ID: {folder_id}")
+
+    service, err = _drive_service()
     if not service:
-        return []
+        return [], [err]
 
+    debug.append("Drive認証: OK")
     cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+    debug.append(f"直近3ヶ月の基準日: {cutoff.date()}")
+
     invoices = []
 
     # フォルダ直下のPDF
-    for f in _list_pdfs_in_folder(service, folder_id):
-        if _should_include(f, "", cutoff):
+    root_pdfs = _list_pdfs_in_folder(service, folder_id)
+    debug.append(f"フォルダ直下のPDF: {len(root_pdfs)} 件")
+    for f in root_pdfs:
+        include, reason = _should_include(f, "", cutoff)
+        debug.append(f"  {'✅' if include else '⏭️'} {f['name']} ({reason})")
+        if include:
             b64 = _download_pdf(service, f["id"])
             if b64:
                 invoices.append({"name": f["name"], "data": b64})
+            else:
+                debug.append(f"    ⚠️ ダウンロード失敗")
 
-    # サブフォルダ内のPDF（1段階のみ）
-    for subfolder in _list_subfolders(service, folder_id):
-        for f in _list_pdfs_in_folder(service, subfolder["id"]):
-            if _should_include(f, subfolder["name"], cutoff):
+    # サブフォルダ
+    subfolders = _list_subfolders(service, folder_id)
+    debug.append(f"サブフォルダ: {len(subfolders)} 件 → {[s['name'] for s in subfolders]}")
+    for subfolder in subfolders:
+        sub_pdfs = _list_pdfs_in_folder(service, subfolder["id"])
+        debug.append(f"  [{subfolder['name']}] PDF: {len(sub_pdfs)} 件")
+        for f in sub_pdfs:
+            include, reason = _should_include(f, subfolder["name"], cutoff)
+            debug.append(f"    {'✅' if include else '⏭️'} {f['name']} ({reason})")
+            if include:
                 b64 = _download_pdf(service, f["id"])
                 if b64:
                     invoices.append({"name": f"{subfolder['name']}/{f['name']}", "data": b64})
+                else:
+                    debug.append(f"      ⚠️ ダウンロード失敗")
 
-    return invoices
+    debug.append(f"取得完了: {len(invoices)} 件")
+    return invoices, debug
