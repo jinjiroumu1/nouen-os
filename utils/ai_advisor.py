@@ -150,8 +150,8 @@ def _fetch_db_records(db_id, keyword_prop=None, keyword="", limit=6):
 # ── システムプロンプト共通 ────────────────────────────────
 def _base_system(kenjin, past, role_desc):
     # PDFが設定されていれば「基本書PDFを参照」と明示、なければ従来の記述
-    from utils.book_loader import list_pdf_files
-    pdf_files = list_pdf_files()
+    from utils.book_loader import load_books
+    pdf_files = load_books()
     if pdf_files:
         book_note = "① 添付された基本書・参考書PDF（実際の内容を参照）"
     else:
@@ -197,8 +197,20 @@ def _call_claude(system, first_message, chat_history):
         )
 
     # PDFブロックを取得（Google Drive未設定の場合は空リスト）
-    from utils.book_loader import get_pdf_document_blocks
-    pdf_blocks = get_pdf_document_blocks()
+    from utils.book_loader import load_books
+    books = load_books()
+    pdf_blocks = [
+        {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": b["data"],
+            },
+            "title": b["name"],
+        }
+        for b in books
+    ]
 
     # 最初のメッセージにPDFブロックを付加
     if pdf_blocks:
