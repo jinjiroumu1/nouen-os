@@ -1,6 +1,6 @@
 import streamlit as st
-from utils.ai_advisor import get_ai_response_accounting
-from utils.sheets_loader import load_sheets
+from utils.ai_advisor import get_ai_response_accounting, extract_delivery_note
+from utils.sheets_loader import load_sheets, append_cost_row
 from utils.notion_sync import save_accounting_log
 
 st.set_page_config(page_title="会計・原価管理", page_icon="💰", layout="wide")
@@ -44,6 +44,72 @@ if user_input:
 if st.session_state.accounting_chat and st.button("チャットをリセット"):
     st.session_state.accounting_chat = []
     st.rerun()
+
+st.markdown("---")
+
+# ── 納品書写真読み取り ─────────────────────────────────────
+st.subheader("📷 納品書写真から原価計算")
+st.caption("納品書の写真をアップロードすると、AI勘ちゃんが自動で情報を抽出します。")
+
+uploaded = st.file_uploader("納品書画像をアップロード（JPG / PNG）", type=["jpg", "jpeg", "png"])
+
+if uploaded:
+    st.image(uploaded, width=300)
+
+    if st.button("🔍 AIで情報を抽出する"):
+        with st.spinner("勘ちゃんが納品書を読み取っています…"):
+            mime = "image/jpeg" if uploaded.type in ("image/jpeg", "image/jpg") else "image/png"
+            result = extract_delivery_note(uploaded.read(), mime)
+
+        if "error" in result:
+            st.error(f"抽出エラー: {result['error']}")
+        else:
+            st.session_state["delivery_note"] = result
+            st.success("抽出完了！内容を確認・編集してください。")
+
+if "delivery_note" in st.session_state:
+    dn = st.session_state["delivery_note"]
+    st.markdown("#### 抽出結果（編集可能）")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        date         = st.text_input("日付",         value=str(dn.get("date") or ""))
+        product_name = st.text_input("商品名",       value=str(dn.get("product_name") or ""))
+        farmer_name  = st.text_input("農家さん名",   value=str(dn.get("farmer_name") or ""))
+    with col2:
+        purchase_price = st.number_input("仕入価格（円）",     value=float(dn.get("purchase_price") or 0), step=1.0)
+        shipping_fee   = st.number_input("送料（円）",         value=float(dn.get("shipping_fee") or 0),   step=1.0)
+        total_weight   = st.number_input("全体の重さ（g）",    value=float(dn.get("total_weight") or 0),   step=1.0)
+        unit_weight    = st.number_input("1商品の重さ（g）",   value=float(dn.get("unit_weight") or 0),    step=1.0)
+
+    # 原価・粗利の自動計算
+    if total_weight > 0:
+        cost = (purchase_price + shipping_fee) * unit_weight / total_weight
+    else:
+        cost = 0.0
+
+    selling_price = st.number_input("販売価格（円）", value=0.0, step=1.0)
+    gross_profit  = selling_price - cost
+
+    st.markdown("---")
+    col_a, col_b, col_c = st.columns(3)
+    col_a.metric("原価", f"¥{cost:.1f}")
+    col_b.metric("販売価格", f"¥{selling_price:.1f}")
+    col_c.metric("粗利", f"¥{gross_profit:.1f}")
+
+    if st.button("📊 スプレッドシートに保存"):
+        row = [
+            date, product_name, farmer_name,
+            purchase_price, shipping_fee,
+            total_weight, unit_weight,
+            round(cost, 1), selling_price, round(gross_profit, 1),
+        ]
+        ok = append_cost_row(row)
+        if ok:
+            st.success("スプレッドシートに保存しました！")
+            del st.session_state["delivery_note"]
+        else:
+            st.error("保存に失敗しました。Secretsとスプレッドシートの共有設定を確認してください。")
 
 st.markdown("---")
 

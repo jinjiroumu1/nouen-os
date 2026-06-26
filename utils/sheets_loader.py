@@ -2,7 +2,7 @@ import json
 import streamlit as st
 
 
-def _sheets_client():
+def _sheets_client(write=False):
     try:
         from google.oauth2.service_account import Credentials
         import gspread
@@ -11,16 +11,36 @@ def _sheets_client():
         if not sa_json:
             return None
         sa_info = json.loads(sa_json)
-        creds = Credentials.from_service_account_info(
-            sa_info,
-            scopes=[
-                "https://www.googleapis.com/auth/spreadsheets.readonly",
-                "https://www.googleapis.com/auth/drive.readonly",
-            ],
-        )
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ] if write else [
+            "https://www.googleapis.com/auth/spreadsheets.readonly",
+            "https://www.googleapis.com/auth/drive.readonly",
+        ]
+        creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
         return gspread.authorize(creds)
     except Exception:
         return None
+
+
+def append_cost_row(row: list) -> bool:
+    """
+    原価計算シート（SHEET_COST_WRITE）の末尾に1行追記する。
+    row: [日付, 商品名, 農家さん名, 仕入価格, 送料, 全体の重さ, 1商品の重さ, 原価, 販売価格, 粗利]
+    成功時 True、失敗時 False を返す。
+    """
+    sheet_id = "1-5qW6qNy7QX0dme8nypS5rjjO-2h2A033ys8XiGcwr4"
+    client = _sheets_client(write=True)
+    if not client:
+        return False
+    try:
+        wb = client.open_by_key(sheet_id)
+        ws = wb.sheet1
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return True
+    except Exception as e:
+        return False
 
 
 def _sheet_to_text(client, sheet_id: str, label: str) -> str:

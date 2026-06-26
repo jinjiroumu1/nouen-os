@@ -357,6 +357,63 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
     return _call_claude(system, question, chat_history, use_books=False)
 
 
+def extract_delivery_note(image_bytes: bytes, media_type: str) -> dict:
+    """
+    納品書画像をClaude APIに送り、情報を抽出してdictで返す。
+    返り値: {date, product_name, farmer_name, purchase_price, shipping_fee,
+              total_weight, unit_weight, error}
+    """
+    import base64
+    client = _claude()
+    if not client:
+        return {"error": "ANTHROPIC_API_KEY が未設定です"}
+
+    b64 = base64.standard_b64encode(image_bytes).decode()
+    prompt = """この納品書画像から以下の情報をJSONで抽出してください。
+不明な項目は null にしてください。数値は数字のみ（単位なし）で返してください。
+
+{
+  "date": "日付（YYYY-MM-DD形式、わからなければそのまま）",
+  "product_name": "商品名",
+  "farmer_name": "農家さん名・生産者名",
+  "purchase_price": 仕入価格（数値）,
+  "shipping_fee": 送料（数値）,
+  "total_weight": 全体の重さg（数値）,
+  "unit_weight": 1商品の重さg（数値）
+}
+
+JSONのみ返してください。"""
+
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=500,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": b64,
+                        },
+                    },
+                    {"type": "text", "text": prompt},
+                ],
+            }],
+        )
+        import json, re
+        text = response.content[0].text
+        # JSONブロック抽出
+        m = re.search(r'\{[\s\S]*\}', text)
+        if m:
+            return json.loads(m.group())
+        return {"error": f"JSON解析失敗: {text[:200]}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ── ネットワーク図：自由チャット ──────────────────────────
 def get_ai_response_network(question: str, chat_history: list) -> str:
     """ネットワーク図用の自由チャット。回答後にノード抽出を行う。"""
