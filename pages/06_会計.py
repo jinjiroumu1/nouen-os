@@ -73,7 +73,7 @@ if uploaded:
             # items が空またはない場合は1商品として補完
             items = result.get("items") or []
             if not items:
-                items = [{"product_name": "", "purchase_price": 0, "total_weight": 0, "unit_weight": 0}]
+                items = [{"product_name": "", "purchase_price": 0, "total_quantity": 0, "unit_quantity": 0, "unit": "g"}]
             st.session_state["dn_date"]         = str(result.get("date") or "")
             st.session_state["dn_farmer"]       = str(result.get("farmer_name") or "")
             st.session_state["dn_shipping"]     = float(result.get("shipping_fee") or 0)
@@ -104,38 +104,43 @@ if "dn_items" in st.session_state:
     edited_items = []
     for i, item in enumerate(items):
         st.markdown(f"**商品 {i+1}**")
-        c1, c2, c3, c4, c5, c6 = st.columns([3, 2, 2, 2, 2, 1])
+        c1, c2, c3, c4, c5, c6, c7 = st.columns([3, 2, 2, 2, 1, 2, 1])
         with c1:
             pname = st.text_input("商品名", value=str(item.get("product_name") or ""), key=f"pname_{i}")
         with c2:
             pprice = st.number_input("仕入価格（円）", value=float(item.get("purchase_price") or 0), step=1.0, key=f"pprice_{i}")
         with c3:
-            tw = st.number_input("全体の重さ（g）", value=float(item.get("total_weight") or 0), step=1.0, key=f"tw_{i}")
+            tq = st.number_input("全体の数量", value=float(item.get("total_quantity") or item.get("total_weight") or 0), step=1.0, key=f"tq_{i}")
         with c4:
-            uw = st.number_input("1商品の重さ（g）", value=float(item.get("unit_weight") or 0), step=1.0, key=f"uw_{i}")
+            uq = st.number_input("1商品の数量", value=float(item.get("unit_quantity") or item.get("unit_weight") or 0), step=1.0, key=f"uq_{i}")
         with c5:
-            sp = st.number_input("販売価格（円）", value=0.0, step=1.0, key=f"sp_{i}")
+            default_unit = item.get("unit", "g")
+            unit_idx = 0 if default_unit == "g" else 1
+            unit = st.selectbox("単位", ["g", "個"], index=unit_idx, key=f"unit_{i}")
         with c6:
+            sp = st.number_input("販売価格（円）", value=0.0, step=1.0, key=f"sp_{i}")
+        with c7:
             if st.button("🗑️", key=f"del_{i}") and n > 1:
                 st.session_state["dn_items"].pop(i)
                 st.rerun()
 
-        cost = (pprice + shipping_per_item) * uw / tw if tw > 0 else 0.0
+        cost = (pprice + shipping_per_item) * uq / tq if tq > 0 else 0.0
         gross = sp - cost
         st.caption(f"按分送料: ¥{shipping_per_item:.1f}　原価: ¥{cost:.1f}　粗利: ¥{gross:.1f}")
 
         edited_items.append({
             "product_name": pname,
             "purchase_price": pprice,
-            "total_weight": tw,
-            "unit_weight": uw,
+            "total_quantity": tq,
+            "unit_quantity": uq,
+            "unit": unit,
             "selling_price": sp,
             "cost": cost,
             "gross": gross,
         })
 
     if st.button("➕ 行を追加"):
-        st.session_state["dn_items"].append({"product_name": "", "purchase_price": 0, "total_weight": 0, "unit_weight": 0})
+        st.session_state["dn_items"].append({"product_name": "", "purchase_price": 0, "total_quantity": 0, "unit_quantity": 0, "unit": "g"})
         st.rerun()
 
     st.markdown("---")
@@ -159,8 +164,9 @@ if "dn_items" in st.session_state:
                 farmer_name,
                 item["purchase_price"],
                 round(shipping_per_item, 1),
-                item["total_weight"],
-                item["unit_weight"],
+                item["total_quantity"],
+                item["unit_quantity"],
+                item["unit"],
                 round(item["cost"], 1),
                 item["selling_price"],
                 round(item["gross"], 1),

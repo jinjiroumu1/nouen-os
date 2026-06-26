@@ -382,6 +382,7 @@ def extract_delivery_note(image_bytes: bytes, media_type: str) -> dict:
     prompt = """この納品書画像から情報を抽出し、以下のJSON形式で返してください。
 複数商品がある場合は items 配列に全て列挙してください。
 不明な項目は null、数値は単位なしの数字のみで返してください。
+unit は「g」または「個」を自動判定してください（重さで売られているものは「g」、個数で売られているものは「個」）。
 
 {
   "date": "日付（YYYY-MM-DD、不明ならそのまま）",
@@ -391,8 +392,9 @@ def extract_delivery_note(image_bytes: bytes, media_type: str) -> dict:
     {
       "product_name": "商品名",
       "purchase_price": 仕入価格（数値）,
-      "total_weight": 全体の重さg（数値）,
-      "unit_weight": 1商品の重さg（数値）
+      "total_quantity": 全体の数量（数値）,
+      "unit_quantity": 1商品の数量（数値）,
+      "unit": "g または 個"
     }
   ]
 }
