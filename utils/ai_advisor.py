@@ -371,7 +371,7 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
     except Exception:
         pass
 
-    # 3. Notion会計チャットログ（直近10件）
+    # 3. Notion会計チャットログ（50件取得・価格関連を優先）
     notion_log = ""
     try:
         from utils.notion_sync import _get_client, _get_or_create_db, ACCOUNTING_PAGE_ID
@@ -379,17 +379,26 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
         if client:
             db_id = _get_or_create_db(client, ACCOUNTING_PAGE_ID, "会計チャットログ")
             if db_id:
-                res = client.databases.query(**{"database_id": db_id, "page_size": 10})
-                lines = []
+                res = client.databases.query(**{"database_id": db_id, "page_size": 50})
+                price_keywords = {"売値", "販売価格", "決定", "価格", "値段", "円", "単価", "売価"}
+                priority_lines = []
+                other_lines    = []
                 for page in res.get("results", []):
                     props = page.get("properties", {})
                     q_val = props.get("質問", {}).get("title", [])
                     a_val = props.get("回答", {}).get("rich_text", [])
                     q_text = q_val[0]["text"]["content"] if q_val else ""
                     a_text = a_val[0]["text"]["content"] if a_val else ""
-                    if q_text:
-                        lines.append(f"Q: {q_text}\nA: {a_text[:300]}")
-                notion_log = "\n\n".join(lines)
+                    if not q_text:
+                        continue
+                    entry = f"Q: {q_text}\nA: {a_text[:400]}"
+                    if any(kw in q_text or kw in a_text for kw in price_keywords):
+                        priority_lines.append(entry)
+                    else:
+                        other_lines.append(entry)
+                # 価格関連を先頭に、残りを後ろに結合
+                all_lines = priority_lines + other_lines
+                notion_log = "\n\n".join(all_lines)
     except Exception:
         pass
 
@@ -407,13 +416,14 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
 ■ 納品書ファイル一覧（仕入れ先・商品・日付の記録）
 {delivery_filenames[:1500] if delivery_filenames else "（未設定またはファイルなし）"}
 
-■ 過去の会計チャットログ（これまでの質問・回答の履歴）
-{notion_log[:1500] if notion_log else "（記録なし）"}
+■ 過去の会計チャットログ（売値・価格決定の記録を含む履歴）
+{notion_log[:2500] if notion_log else "（記録なし）"}
 
 【回答のルール】
 - 数値データを具体的に引用して回答する
 - 原価率・利益率など計算が必要な場合は計算過程も示す
 - 納品書ファイル名から仕入れ先・商品・日付を読み取って回答に活用する
+- チャットログには売値・価格決定の記録も含まれています。価格に関する質問はチャットログを優先して参照してください
 - データがない場合は「データが見つかりません」と正直に伝える
 - 改善提案は具体的・実践的に
 """
