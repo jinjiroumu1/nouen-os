@@ -6,3 +6,4 @@ google-auth>=2.0.0
 google-api-python-client>=2.0.0
 pyvis>=0.3.2
 gspread>=5.0.0
+python-docx>=0.8.11

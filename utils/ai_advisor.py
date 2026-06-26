@@ -203,23 +203,27 @@ def _call_claude(system, first_message, chat_history, use_books=True, extra_pdfs
             "Streamlit Cloud の Secrets に追加してください。"
         )
 
-    # PDFブロックを取得（use_books=False の場合はスキップ）
+    # PDF/Wordブロックを取得（use_books=False の場合はスキップ）
     pdf_blocks = []
     if use_books:
         from utils.book_loader import load_books
         books = load_books()
-        pdf_blocks = [
-            {
-                "type": "document",
-                "source": {
-                    "type": "base64",
-                    "media_type": "application/pdf",
-                    "data": b["data"],
-                },
-                "title": b["name"],
-            }
-            for b in books
-        ]
+        word_texts = []
+        for b in books:
+            if b.get("type") == "word":
+                word_texts.append(f"【{b['name']}】\n{b['text'][:3000]}")
+            else:
+                pdf_blocks.append({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": b["data"],
+                    },
+                    "title": b["name"],
+                })
+        if word_texts:
+            system = system + "\n\n【基本書（Word）】\n" + "\n\n".join(word_texts)
 
     # 追加PDF（請求書など）
     if extra_pdfs:

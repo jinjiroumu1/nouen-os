@@ -1,6 +1,9 @@
 import base64
+import io
 import json
 import streamlit as st
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def _drive_service():
@@ -21,12 +24,38 @@ def _drive_service():
         return None
 
 
+def _download_bytes(service, file_id: str) -> bytes | None:
+    try:
+        from googleapiclient.http import MediaIoBaseDownload
+        request = service.files().get_media(fileId=file_id)
+        buf = io.BytesIO()
+        downloader = MediaIoBaseDownload(buf, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
+def _docx_to_text(data: bytes) -> str:
+    """python-docx でWordファイルからテキストを抽出する。"""
+    try:
+        from docx import Document
+        doc = Document(io.BytesIO(data))
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    except Exception:
+        return ""
+
+
 @st.cache_data(ttl=1800)
 def load_books() -> list[dict]:
     """
-    Google DriveフォルダのPDFを全件取得してbase64エンコードで返す。
-    返り値: [{"name": "ファイル名", "data": "base64文字列"}, ...]
-    Google Drive未設定の場合は空リストを返す（フォールバック）。
+    Google DriveフォルダのPDF・Wordを全件取得して返す。
+    返り値:
+      PDF  → {"name": str, "type": "pdf",  "data": "base64文字列"}
+      Word → {"name": str, "type": "word", "text": "抽出テキスト"}
+    Drive未設定の場合は空リスト。
     """
     folder_id = st.secrets.get("BOOK_FOLDER_ID", "")
     if not folder_id:
@@ -37,35 +66,30 @@ def load_books() -> list[dict]:
         return []
 
     try:
-        from googleapiclient.http import MediaIoBaseDownload
-        import io
-
-        # フォルダ内のPDFを全件検索
         query = (
             f"'{folder_id}' in parents"
-            " and mimeType='application/pdf'"
+            f" and (mimeType='application/pdf' or mimeType='{DOCX_MIME}')"
             " and trashed=false"
         )
         result = service.files().list(
             q=query,
-            fields="files(id, name)",
+            fields="files(id, name, mimeType)",
             pageSize=50,
         ).execute()
         files = result.get("files", [])
 
         books = []
         for f in files:
-            try:
-                request = service.files().get_media(fileId=f["id"])
-                buf = io.BytesIO()
-                downloader = MediaIoBaseDownload(buf, request)
-                done = False
-                while not done:
-                    _, done = downloader.next_chunk()
-                b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
-                books.append({"name": f["name"], "data": b64})
-            except Exception:
+            data = _download_bytes(service, f["id"])
+            if not data:
                 continue
+            if f["mimeType"] == DOCX_MIME:
+                text = _docx_to_text(data)
+                if text:
+                    books.append({"name": f["name"], "type": "word", "text": text})
+            else:
+                b64 = base64.standard_b64encode(data).decode("utf-8")
+                books.append({"name": f["name"], "type": "pdf", "data": b64})
 
         return books
 
