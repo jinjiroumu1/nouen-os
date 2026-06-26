@@ -1,5 +1,6 @@
 import streamlit as st
 from notion_client import Client
+from datetime import datetime, timezone
 
 DB_IDS = {
     "farm_diary":        "09ad62605aa543cfac7139c50b1e9b4c",
@@ -7,6 +8,9 @@ DB_IDS = {
     "recipes":           "7f6528a1c78a4e1cbe1fd11af1dadfc0",
     "chat_logs":         "fdd51460926141c2b2ce0b36adf474c2",
 }
+
+ACCOUNTING_PAGE_ID = "388a73ede493800ea5fdd751647cba5d"
+POP_PAGE_ID        = "38ba73ede49380a5beb6e30548302f30"
 
 SOURCE_TYPE_LABEL = {
     "souhatsuchi": "🌸創発知",
@@ -108,6 +112,75 @@ def save_recipe(recipe_name, vegetable, ingredients, season, notes, source_type)
         )
     except Exception as e:
         st.warning(f"Notion同期エラー（料理）: {e}")
+
+
+def _get_or_create_db(client, page_id: str, db_title: str) -> str | None:
+    """ページの子DBを検索し、なければ作成してIDを返す。"""
+    try:
+        results = client.blocks.children.list(block_id=page_id)
+        for block in results.get("results", []):
+            if block.get("type") == "child_database":
+                title = block.get("child_database", {}).get("title", "")
+                if title == db_title:
+                    return block["id"].replace("-", "")
+        # DBが存在しないので作成
+        db = client.databases.create(
+            parent={"page_id": page_id},
+            title=[{"text": {"content": db_title}}],
+            properties={
+                "質問": {"title": {}},
+                "回答": {"rich_text": {}},
+                "日時": {"date": {}},
+            },
+        )
+        return db["id"].replace("-", "")
+    except Exception as e:
+        st.warning(f"Notion DB取得/作成エラー: {e}")
+        return None
+
+
+def save_accounting_log(question: str, answer: str):
+    """会計ページの子DBに質問・回答を保存する。"""
+    client = _get_client()
+    if not client:
+        return
+    db_id = _get_or_create_db(client, ACCOUNTING_PAGE_ID, "会計チャットログ")
+    if not db_id:
+        return
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        client.pages.create(
+            parent={"database_id": db_id},
+            properties={
+                "質問": _title(question),
+                "回答": _rich_text(answer),
+                "日時": _date(now),
+            },
+        )
+    except Exception as e:
+        st.warning(f"Notion同期エラー（会計）: {e}")
+
+
+def save_pop_log(question: str, answer: str):
+    """POPページの子DBに質問・回答を保存する。"""
+    client = _get_client()
+    if not client:
+        return
+    db_id = _get_or_create_db(client, POP_PAGE_ID, "POPチャットログ")
+    if not db_id:
+        return
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        client.pages.create(
+            parent={"database_id": db_id},
+            properties={
+                "質問": _title(question),
+                "回答": _rich_text(answer),
+                "日時": _date(now),
+            },
+        )
+    except Exception as e:
+        st.warning(f"Notion同期エラー（POP）: {e}")
 
 
 def save_chat_log(question, answer, related_topics, source_type):

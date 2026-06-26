@@ -1,6 +1,7 @@
 import streamlit as st
 from utils.ai_advisor import get_ai_response_accounting
 from utils.sheets_loader import load_sheets
+from utils.notion_sync import save_accounting_log
 
 st.set_page_config(page_title="会計・原価管理", page_icon="💰", layout="wide")
 from pathlib import Path as _P
@@ -38,6 +39,7 @@ if user_input:
     st.session_state.accounting_chat.append({"role": "assistant", "content": reply})
     with st.chat_message("assistant", avatar="🌱"):
         st.markdown(reply)
+    save_accounting_log(user_input, reply)
 
 if st.session_state.accounting_chat and st.button("チャットをリセット"):
     st.session_state.accounting_chat = []
