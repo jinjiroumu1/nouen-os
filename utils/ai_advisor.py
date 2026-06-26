@@ -339,9 +339,59 @@ def get_ai_response_chat(entry: dict, chat_history: list) -> str:
 
 # ── 会計・原価管理 ─────────────────────────────────────────
 def get_ai_response_accounting(question: str, chat_history: list) -> str:
-    """会計・原価・販売データ・請求書PDFを参照してAI勘ちゃんが回答する。"""
+    """スプレッドシート・納品書ファイル一覧・会計チャットログを参照してAI勘ちゃんが回答する。"""
+    import streamlit as st
     from utils.sheets_loader import load_sheets
+
+    # 1. スプレッドシート
     sheets_text = load_sheets()
+
+    # 2. 納品書ファイル名一覧
+    delivery_filenames = ""
+    try:
+        import json as _json
+        from google.oauth2.service_account import Credentials
+        from googleapiclient.discovery import build
+        folder_id = st.secrets.get("DELIVERY_PHOTO_FOLDER_ID", "")
+        sa_json   = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+        if folder_id and sa_json:
+            creds = Credentials.from_service_account_info(
+                _json.loads(sa_json),
+                scopes=["https://www.googleapis.com/auth/drive.readonly"],
+            )
+            svc = build("drive", "v3", credentials=creds)
+            res = svc.files().list(
+                q=f"'{folder_id}' in parents and trashed=false",
+                fields="files(name)",
+                pageSize=100,
+            ).execute()
+            names = [f["name"] for f in res.get("files", [])]
+            if names:
+                delivery_filenames = "\n".join(names)
+    except Exception:
+        pass
+
+    # 3. Notion会計チャットログ（直近10件）
+    notion_log = ""
+    try:
+        from utils.notion_sync import _get_client, _get_or_create_db, ACCOUNTING_PAGE_ID
+        client = _get_client()
+        if client:
+            db_id = _get_or_create_db(client, ACCOUNTING_PAGE_ID, "会計チャットログ")
+            if db_id:
+                res = client.databases.query(**{"database_id": db_id, "page_size": 10})
+                lines = []
+                for page in res.get("results", []):
+                    props = page.get("properties", {})
+                    q_val = props.get("質問", {}).get("title", [])
+                    a_val = props.get("回答", {}).get("rich_text", [])
+                    q_text = q_val[0]["text"]["content"] if q_val else ""
+                    a_text = a_val[0]["text"]["content"] if a_val else ""
+                    if q_text:
+                        lines.append(f"Q: {q_text}\nA: {a_text[:300]}")
+                notion_log = "\n\n".join(lines)
+    except Exception:
+        pass
 
     system = f"""あなたは「AI勘ちゃん」——われまち農縁団の会計・原価管理アドバイザーです。
 
@@ -350,11 +400,20 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
 農縁団の経営改善に役立つアドバイスをします。
 
 【参照データ】
-{sheets_text[:4000] if sheets_text else "（スプレッドシートが未設定です）"}
+
+■ スプレッドシート（売値・原価・仕入価格・粗利のデータ）
+{sheets_text[:3000] if sheets_text else "（未設定）"}
+
+■ 納品書ファイル一覧（仕入れ先・商品・日付の記録）
+{delivery_filenames[:1500] if delivery_filenames else "（未設定またはファイルなし）"}
+
+■ 過去の会計チャットログ（これまでの質問・回答の履歴）
+{notion_log[:1500] if notion_log else "（記録なし）"}
 
 【回答のルール】
 - 数値データを具体的に引用して回答する
 - 原価率・利益率など計算が必要な場合は計算過程も示す
+- 納品書ファイル名から仕入れ先・商品・日付を読み取って回答に活用する
 - データがない場合は「データが見つかりません」と正直に伝える
 - 改善提案は具体的・実践的に
 """
