@@ -25,7 +25,7 @@ for msg in st.session_state.accounting_chat:
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
 
-user_input = st.chat_input("例：なすのあげびたしの原価率は？　パンダ広場の売上合計は？")
+user_input = st.chat_input("例：なすのあげびたしの原価率は？　パンダ広場の売上合計は？", key="accounting_input")
 if user_input:
     st.session_state.accounting_chat.append({"role": "user", "content": user_input})
     with st.chat_message("user", avatar="👨‍🌾"):
