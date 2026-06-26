@@ -79,11 +79,9 @@ if "dn_items" in st.session_state:
     with col1:
         date = st.text_input("日付", value=st.session_state["dn_date"], key="edit_date")
     with col2:
-        farmer_name = st.text_input("農家さん名", value=st.session_state["dn_farmer"], key="edit_farmer")
+        farmer_name = st.text_input("農家さん・仕入先", value=st.session_state["dn_farmer"], key="edit_farmer")
     with col3:
         shipping_fee = st.number_input("送料合計（円）", value=st.session_state["dn_shipping"], step=1.0, key="edit_shipping")
-
-    note = st.text_input("備考（K列・全行共通）", value="", key="edit_note")
 
     st.markdown("---")
     st.markdown("**商品ごとの内訳**（送料は商品数で按分）")
@@ -130,6 +128,7 @@ if "dn_items" in st.session_state:
         st.rerun()
 
     st.markdown("---")
+    note = st.text_input("備考（K列・全行共通）", value="", key="edit_note")
 
     if st.button("📊 まとめて保存"):
         # 写真をDriveにアップロード

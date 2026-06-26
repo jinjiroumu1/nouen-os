@@ -381,7 +381,7 @@ def extract_delivery_note(image_bytes: bytes, media_type: str) -> dict:
 
 {
   "date": "日付（YYYY-MM-DD、不明ならそのまま）",
-  "farmer_name": "農家さん名・生産者名",
+  "farmer_name": "農家さん・仕入先名",
   "shipping_fee": 送料合計（数値）,
   "items": [
     {
