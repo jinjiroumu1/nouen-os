@@ -15,7 +15,7 @@ st.caption("販売・原価・支払いをAI勘ちゃんと一緒に確認する
 
 # ── チャット ──────────────────────────────────────────────
 st.subheader("💬 AI勘ちゃんに質問する")
-st.info("👇 下の入力欄から質問してください。原価・売上・支払いについて何でも聞けます。")
+st.caption("原価・売上・支払いについて何でも聞いてください。")
 
 if "accounting_chat" not in st.session_state:
     st.session_state.accounting_chat = []
@@ -25,8 +25,18 @@ for msg in st.session_state.accounting_chat:
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
 
-user_input = st.chat_input("例：なすのあげびたしの原価率は？　パンダ広場の売上合計は？", key="accounting_input")
-if user_input:
+col_input, col_send = st.columns([5, 1])
+with col_input:
+    user_input = st.text_input(
+        "質問を入力",
+        placeholder="例：なすのあげびたしの原価率は？　パンダ広場の売上合計は？",
+        label_visibility="collapsed",
+        key="accounting_text_input",
+    )
+with col_send:
+    send = st.button("送信", use_container_width=True)
+
+if send and user_input:
     st.session_state.accounting_chat.append({"role": "user", "content": user_input})
     with st.chat_message("user", avatar="👨‍🌾"):
         st.markdown(user_input)
@@ -36,6 +46,7 @@ if user_input:
     with st.chat_message("assistant", avatar="🌱"):
         st.markdown(reply)
     save_accounting_log(user_input, reply)
+    st.rerun()
 
 if st.session_state.accounting_chat and st.button("チャットをリセット"):
     st.session_state.accounting_chat = []
