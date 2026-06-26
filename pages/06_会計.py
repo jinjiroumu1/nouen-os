@@ -116,7 +116,7 @@ if "dn_items" in st.session_state:
         with c5:
             default_unit = item.get("unit", "g")
             unit_idx = 0 if default_unit == "g" else 1
-            unit = st.selectbox("単位", ["g", "個"], index=unit_idx, key=f"unit_{i}")
+            unit = st.radio("単位", ["g", "個"], index=unit_idx, horizontal=True, key=f"unit_{i}")
         with c6:
             sp = st.number_input("販売価格（円）", value=0.0, step=1.0, key=f"sp_{i}")
         with c7:
