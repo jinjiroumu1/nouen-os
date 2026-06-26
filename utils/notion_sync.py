@@ -11,6 +11,7 @@ DB_IDS = {
 
 ACCOUNTING_PAGE_ID = "388a73ede493800ea5fdd751647cba5d"
 POP_PAGE_ID        = "38ba73ede49380a5beb6e30548302f30"
+HYGIENE_PAGE_ID    = "38ba73ede49380bbb4befb5d70db6726"
 
 SOURCE_TYPE_LABEL = {
     "souhatsuchi": "🌸創発知",
@@ -181,6 +182,113 @@ def save_pop_log(question: str, answer: str):
         )
     except Exception as e:
         st.warning(f"Notion同期エラー（POP）: {e}")
+
+
+def _get_or_create_expiry_db(client) -> str | None:
+    """衛生ページに賞味期限管理DBを取得または作成してIDを返す。"""
+    try:
+        results = client.blocks.children.list(block_id=HYGIENE_PAGE_ID)
+        for block in results.get("results", []):
+            if block.get("type") == "child_database":
+                title = block.get("child_database", {}).get("title", "")
+                if title == "賞味期限管理":
+                    return block["id"].replace("-", "")
+        db = client.databases.create(
+            parent={"page_id": HYGIENE_PAGE_ID},
+            title=[{"text": {"content": "賞味期限管理"}}],
+            properties={
+                "商品名":   {"title": {}},
+                "賞味期限": {"date": {}},
+                "数量":     {"rich_text": {}},
+                "保管場所": {"rich_text": {}},
+                "備考":     {"rich_text": {}},
+            },
+        )
+        return db["id"].replace("-", "")
+    except Exception as e:
+        st.warning(f"Notion DB取得/作成エラー（賞味期限）: {e}")
+        return None
+
+
+def save_expiry_item(product_name: str, expiry_date: str, quantity: str,
+                     storage_location: str, note: str):
+    """賞味期限管理DBに商品を保存する。"""
+    client = _get_client()
+    if not client:
+        return False
+    db_id = _get_or_create_expiry_db(client)
+    if not db_id:
+        return False
+    try:
+        client.pages.create(
+            parent={"database_id": db_id},
+            properties={
+                "商品名":   _title(product_name),
+                "賞味期限": _date(expiry_date),
+                "数量":     _rich_text(quantity),
+                "保管場所": _rich_text(storage_location),
+                "備考":     _rich_text(note),
+            },
+        )
+        return True
+    except Exception as e:
+        st.warning(f"Notion同期エラー（賞味期限）: {e}")
+        return False
+
+
+def load_expiry_items() -> list[dict]:
+    """
+    賞味期限管理DBの全レコードを取得して返す。
+    返り値: [{"id": str, "product_name": str, "expiry_date": str,
+               "quantity": str, "storage_location": str, "note": str}, ...]
+    """
+    client = _get_client()
+    if not client:
+        return []
+    db_id = _get_or_create_expiry_db(client)
+    if not db_id:
+        return []
+    try:
+        results = client.databases.query(**{"database_id": db_id})
+        items = []
+        for page in results.get("results", []):
+            props = page.get("properties", {})
+
+            def _get_title(p):
+                v = props.get(p, {}).get("title", [])
+                return v[0]["text"]["content"] if v else ""
+
+            def _get_text(p):
+                v = props.get(p, {}).get("rich_text", [])
+                return v[0]["text"]["content"] if v else ""
+
+            def _get_date(p):
+                v = props.get(p, {}).get("date")
+                return v["start"] if v else ""
+
+            items.append({
+                "id":               page["id"],
+                "product_name":     _get_title("商品名"),
+                "expiry_date":      _get_date("賞味期限"),
+                "quantity":         _get_text("数量"),
+                "storage_location": _get_text("保管場所"),
+                "note":             _get_text("備考"),
+            })
+        return items
+    except Exception as e:
+        st.warning(f"Notion読み込みエラー（賞味期限）: {e}")
+        return []
+
+
+def delete_expiry_item(page_id: str):
+    """賞味期限管理DBのレコードをアーカイブ（削除）する。"""
+    client = _get_client()
+    if not client:
+        return
+    try:
+        client.pages.update(page_id=page_id, archived=True)
+    except Exception as e:
+        st.warning(f"Notion削除エラー: {e}")
 
 
 def save_chat_log(question, answer, related_topics, source_type):
