@@ -1,6 +1,6 @@
 import streamlit as st
 from utils.ai_advisor import get_ai_response_accounting, extract_delivery_note
-from utils.sheets_loader import load_sheets, append_cost_row
+from utils.sheets_loader import load_sheets, append_cost_row, upload_delivery_photo
 from utils.notion_sync import save_accounting_log
 
 st.set_page_config(page_title="会計・原価管理", page_icon="💰", layout="wide")
@@ -59,12 +59,15 @@ if uploaded:
     if st.button("🔍 AIで情報を抽出する"):
         with st.spinner("勘ちゃんが納品書を読み取っています…"):
             mime = "image/jpeg" if uploaded.type in ("image/jpeg", "image/jpg") else "image/png"
-            result = extract_delivery_note(uploaded.read(), mime)
+            img_bytes = uploaded.read()
+            result = extract_delivery_note(img_bytes, mime)
 
         if "error" in result:
             st.error(f"抽出エラー: {result['error']}")
         else:
             st.session_state["delivery_note"] = result
+            st.session_state["delivery_image"] = img_bytes
+            st.session_state["delivery_filename"] = uploaded.name
             st.success("抽出完了！内容を確認・編集してください。")
 
 if "delivery_note" in st.session_state:
@@ -90,6 +93,7 @@ if "delivery_note" in st.session_state:
 
     selling_price = st.number_input("販売価格（円）", value=0.0, step=1.0)
     gross_profit  = selling_price - cost
+    note          = st.text_input("備考（K列）", value="")
 
     st.markdown("---")
     col_a, col_b, col_c = st.columns(3)
@@ -98,16 +102,28 @@ if "delivery_note" in st.session_state:
     col_c.metric("粗利", f"¥{gross_profit:.1f}")
 
     if st.button("📊 スプレッドシートに保存"):
+        # 写真をDriveにアップロード
+        photo_link = ""
+        img_bytes = st.session_state.get("delivery_image")
+        if img_bytes:
+            safe_date = date.replace("/", "-").replace(" ", "")
+            safe_name = product_name.replace("/", "・")
+            fname = f"納品書_{safe_date}_{safe_name}.jpg"
+            with st.spinner("写真をGoogle Driveに保存しています…"):
+                photo_link = upload_delivery_photo(img_bytes, fname) or ""
+
         row = [
             date, product_name, farmer_name,
             purchase_price, shipping_fee,
             total_weight, unit_weight,
             round(cost, 1), selling_price, round(gross_profit, 1),
+            note, photo_link,
         ]
         ok = append_cost_row(row)
         if ok:
-            st.success("スプレッドシートに保存しました！")
-            del st.session_state["delivery_note"]
+            st.success("スプレッドシートに保存しました！" + ("　📸 写真も保存しました。" if photo_link else ""))
+            for key in ("delivery_note", "delivery_image", "delivery_filename"):
+                st.session_state.pop(key, None)
         else:
             st.error("保存に失敗しました。Secretsとスプレッドシートの共有設定を確認してください。")
 
