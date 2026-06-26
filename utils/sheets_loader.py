@@ -46,6 +46,69 @@ def append_cost_row(row: list) -> bool:
         return False
 
 
+def search_delivery_photos(keyword: str) -> list[dict]:
+    """
+    DELIVERY_PHOTO_FOLDER_ID フォルダ内をファイル名でキーワード検索する。
+    返り値: [{"id": str, "name": str, "link": str, "thumbnail": bytes|None}, ...]
+    """
+    import json as _json
+    folder_id = st.secrets.get("DELIVERY_PHOTO_FOLDER_ID", "")
+    if not folder_id or not keyword:
+        return []
+    try:
+        from google.oauth2.service_account import Credentials
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseDownload
+        import io as _io
+
+        sa_json = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+        if not sa_json:
+            return []
+        sa_info = _json.loads(sa_json)
+        creds = Credentials.from_service_account_info(
+            sa_info,
+            scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        )
+        service = build("drive", "v3", credentials=creds)
+
+        # ファイル名にキーワードが含まれるものを検索
+        query = (
+            f"'{folder_id}' in parents"
+            f" and name contains '{keyword}'"
+            " and trashed=false"
+        )
+        result = service.files().list(
+            q=query,
+            fields="files(id, name, mimeType, thumbnailLink)",
+            pageSize=50,
+        ).execute()
+        files = result.get("files", [])
+
+        items = []
+        for f in files:
+            # サムネイル取得（小さい画像をダウンロード）
+            thumb = None
+            try:
+                request = service.files().get_media(fileId=f["id"])
+                buf = _io.BytesIO()
+                downloader = MediaIoBaseDownload(buf, request)
+                done = False
+                while not done:
+                    _, done = downloader.next_chunk()
+                thumb = buf.getvalue()
+            except Exception:
+                pass
+            items.append({
+                "id":    f["id"],
+                "name":  f["name"],
+                "link":  f"https://drive.google.com/file/d/{f['id']}/view",
+                "thumb": thumb,
+            })
+        return items
+    except Exception:
+        return []
+
+
 def upload_delivery_photo(image_bytes: bytes, filename: str) -> str | None:
     """
     納品書画像を DELIVERY_PHOTO_FOLDER_ID に保存し、共有リンクを返す。

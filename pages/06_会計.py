@@ -1,6 +1,6 @@
 import streamlit as st
 from utils.ai_advisor import get_ai_response_accounting, extract_delivery_note
-from utils.sheets_loader import load_sheets, append_cost_row, upload_delivery_photo
+from utils.sheets_loader import load_sheets, append_cost_row, upload_delivery_photo, search_delivery_photos
 from utils.notion_sync import save_accounting_log
 from pathlib import Path as _P
 
@@ -183,6 +183,32 @@ if "dn_items" in st.session_state:
             for key in ("dn_date", "dn_farmer", "dn_shipping", "dn_items", "dn_image", "dn_orig_name"):
                 st.session_state.pop(key, None)
             st.rerun()
+
+st.markdown("---")
+
+# ── 納品書検索 ────────────────────────────────────────────
+st.subheader("🔍 納品書を検索")
+st.caption("仕入先名・商品名・日付などのキーワードでGoogle Drive内の納品書画像を検索します。")
+
+search_kw = st.text_input("キーワードを入力", placeholder="例：二見酒店　しょうが　20260621", key="photo_search")
+
+if search_kw:
+    with st.spinner("検索中…"):
+        photo_results = search_delivery_photos(search_kw)
+
+    if not photo_results:
+        st.info("該当する納品書が見つかりませんでした。")
+    else:
+        st.success(f"{len(photo_results)} 件見つかりました")
+        cols = st.columns(3)
+        for idx, item in enumerate(photo_results):
+            with cols[idx % 3]:
+                if item["thumb"]:
+                    st.image(item["thumb"], use_container_width=True)
+                else:
+                    st.markdown("🖼️ （プレビューなし）")
+                st.markdown(f"**{item['name']}**")
+                st.markdown(f"[🔗 Driveで開く]({item['link']})")
 
 st.markdown("---")
 
