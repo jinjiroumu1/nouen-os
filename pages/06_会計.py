@@ -15,7 +15,7 @@ st.caption("販売・原価・支払いをAI勘ちゃんと一緒に確認する
 
 # ── チャット ──────────────────────────────────────────────
 st.subheader("💬 AI勘ちゃんに質問する")
-st.caption("原価・売上・支払いについて何でも聞いてください。")
+st.info("👇 下の入力欄から質問してください。原価・売上・支払いについて何でも聞けます。")
 
 if "accounting_chat" not in st.session_state:
     st.session_state.accounting_chat = []
