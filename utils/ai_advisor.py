@@ -356,21 +356,36 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
     except Exception:
         pass
 
-    # 3. Notion会計チャットログ（50件取得・価格関連を優先）
+    # 3. Notion会計チャットログ（会計ページの子DBを直接検索して取得）
     notion_log = ""
     notion_debug_info = {"status": "未実行", "db_id": None, "count": 0, "error": None, "lines": []}
+    ACCOUNTING_PAGE_ID = "388a73ede493800ea5fdd751647cba5d"
     try:
-        from utils.notion_sync import _get_client, _get_or_create_db, ACCOUNTING_PAGE_ID
-        client = _get_client()
-        if not client:
+        from utils.notion_sync import _get_client
+        nc = _get_client()
+        if not nc:
             notion_debug_info["status"] = "Notionクライアント取得失敗（NOTION_TOKEN未設定?）"
         else:
-            db_id = _get_or_create_db(client, ACCOUNTING_PAGE_ID, "会計チャットログ")
+            # 会計ページの子ブロックから「会計チャットログ」DBを探す
+            db_id = None
+            try:
+                blocks = nc.blocks.children.list(block_id=ACCOUNTING_PAGE_ID, page_size=100)
+                for block in blocks.get("results", []):
+                    if block.get("type") == "child_database":
+                        title = block.get("child_database", {}).get("title", "")
+                        notion_debug_info.setdefault("found_dbs", []).append(f"{title}: {block['id']}")
+                        if title == "会計チャットログ":
+                            db_id = block["id"].replace("-", "")
+                            break
+            except Exception as e:
+                notion_debug_info["status"] = f"子ブロック取得エラー: {e}"
+
             notion_debug_info["db_id"] = db_id
             if not db_id:
-                notion_debug_info["status"] = f"DBが見つかりません（ACCOUNTING_PAGE_ID={ACCOUNTING_PAGE_ID}）"
+                notion_debug_info["status"] = "「会計チャットログ」DBが見つかりません"
             else:
-                res = client.databases.query(**{"database_id": db_id, "page_size": 50})
+                res = nc.databases.query(**{"database_id": db_id, "page_size": 50,
+                    "sorts": [{"timestamp": "created_time", "direction": "descending"}]})
                 results = res.get("results", [])
                 notion_debug_info["count"] = len(results)
                 notion_debug_info["status"] = f"取得成功: {len(results)}件"
@@ -383,10 +398,10 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
                     a_val = props.get("回答", {}).get("rich_text", [])
                     q_text = "".join(r.get("plain_text", "") for r in q_val)
                     a_text = "".join(r.get("plain_text", "") for r in a_val)
-                    if not q_text:
+                    if not q_text and not a_text:
                         continue
                     entry = f"Q: {q_text}\nA: {a_text[:400]}"
-                    notion_debug_info["lines"].append(f"Q: {q_text[:50]} / A: {a_text[:50]}")
+                    notion_debug_info["lines"].append(f"Q: {q_text[:60]} | A: {a_text[:60]}")
                     if any(kw in q_text or kw in a_text for kw in price_keywords):
                         priority_lines.append(entry)
                     else:
@@ -402,10 +417,14 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
         st.write(f"**ステータス:** {notion_debug_info['status']}")
         st.write(f"**DB ID:** {notion_debug_info['db_id']}")
         st.write(f"**取得件数:** {notion_debug_info['count']} 件")
-        if notion_debug_info["error"]:
+        if notion_debug_info.get("found_dbs"):
+            st.markdown("**会計ページ内の子DB一覧:**")
+            for d in notion_debug_info["found_dbs"]:
+                st.text(d)
+        if notion_debug_info.get("error"):
             st.error(f"エラー: {notion_debug_info['error']}")
         if notion_debug_info["lines"]:
-            st.markdown("**取得したログ（先頭50文字）:**")
+            st.markdown("**取得したQ&Aログ（先頭60文字）:**")
             for line in notion_debug_info["lines"]:
                 st.text(line)
         else:
