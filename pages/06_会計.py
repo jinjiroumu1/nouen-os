@@ -185,10 +185,17 @@ if reg_sub == "🛒 仕入れを登録する":
                     st.success(f"抽出完了！{len(items_dn)} 商品を読み取りました。下の「📷 納品書写真から原価計算」セクションで確認・保存してください。")
 
     # プリセットキー → ウィジェットキーへ転送（widget描画前）
-    for _f, _t in [("p_date_pre","p_date"),("p_supplier_pre","p_supplier"),
-                   ("p_tax_pre","p_tax"),("p_shipping_pre","p_shipping"),("p_note_pre","p_note")]:
+    import datetime as _dt
+    for _f, _t in [("p_supplier_pre","p_supplier"),("p_tax_pre","p_tax"),
+                   ("p_shipping_pre","p_shipping"),("p_note_pre","p_note")]:
         if _f in st.session_state:
             st.session_state[_t] = st.session_state.pop(_f)
+    if "p_date_pre" in st.session_state:
+        _d = st.session_state.pop("p_date_pre")
+        try:
+            st.session_state["p_date"] = _dt.date.fromisoformat(str(_d)) if _d else _dt.date.today()
+        except ValueError:
+            st.session_state["p_date"] = _dt.date.today()
 
     if "purchase_items" not in st.session_state:
         st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
