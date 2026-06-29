@@ -1,7 +1,9 @@
 import streamlit as st
 from utils.ai_advisor import get_ai_response_accounting, extract_delivery_note
 from utils.sheets_loader import load_sheets, append_cost_row, upload_delivery_photo, search_delivery_photos
-from utils.notion_sync import save_accounting_log, save_accounting_decision, load_accounting_decisions, save_purchase_record, load_purchase_records
+from utils.notion_sync import (save_accounting_log, save_accounting_decision, load_accounting_decisions,
+                               update_accounting_decision, save_purchase_record, load_purchase_records,
+                               update_purchase_record)
 from pathlib import Path as _P
 
 st.set_page_config(page_title="会計・原価管理", page_icon="💰", layout="wide")
@@ -246,30 +248,48 @@ if reg_sub == "🛒 仕入れを登録する":
     import pandas as _pd
     st.dataframe(_pd.DataFrame(preview_rows), use_container_width=True, hide_index=True)
 
-    if st.button("💾 仕入れを保存する", key="p_save"):
+    edit_page_id = st.session_state.get("p_edit_page_id")
+    btn_label = "💾 修正を保存する" if edit_page_id else "💾 仕入れを保存する"
+    if edit_page_id:
+        st.info("✏️ 修正モード：上書き保存されます")
+
+    if st.button(btn_label, key="p_save"):
         errors = []
         n_items = len(items)
         for it in items:
             taxed_price, ship_per_unit, total_unit = _calc(it)
-            ok, err_msg = save_purchase_record(
-                purchase_date    = str(p_date),
-                supplier         = p_supplier,
-                product_name     = it["name"],
-                unit_price       = it["unit_price"],
-                quantity         = it["quantity"],
-                shipping         = round(ship_per_unit, 1),
-                tax_type         = p_tax,
-                total_unit_price = round(total_unit, 1),
-                note             = p_note,
-            )
+            if edit_page_id:
+                ok, err_msg = update_purchase_record(
+                    page_id          = edit_page_id,
+                    purchase_date    = str(p_date),
+                    supplier         = p_supplier,
+                    product_name     = it["name"],
+                    unit_price       = it["unit_price"],
+                    quantity         = it["quantity"],
+                    shipping         = round(ship_per_unit, 1),
+                    tax_type         = p_tax,
+                    total_unit_price = round(total_unit, 1),
+                    note             = p_note,
+                )
+            else:
+                ok, err_msg = save_purchase_record(
+                    purchase_date    = str(p_date),
+                    supplier         = p_supplier,
+                    product_name     = it["name"],
+                    unit_price       = it["unit_price"],
+                    quantity         = it["quantity"],
+                    shipping         = round(ship_per_unit, 1),
+                    tax_type         = p_tax,
+                    total_unit_price = round(total_unit, 1),
+                    note             = p_note,
+                )
             if not ok:
                 errors.append(f"{it['name'] or '（未入力）'}: {err_msg}")
         if errors:
             st.error("保存失敗:\n" + "\n".join(errors))
         else:
-            st.success(f"✅ {n_items} 件の仕入れを保存しました！")
-            # ウィジェットキーを含めて完全リセット
-            keys_to_delete = ["purchase_items", "p_date", "p_supplier", "p_tax", "p_shipping", "p_note"]
+            st.success("✅ 修正を保存しました！" if edit_page_id else f"✅ {n_items} 件の仕入れを保存しました！")
+            keys_to_delete = ["purchase_items", "p_date", "p_supplier", "p_tax", "p_shipping", "p_note", "p_edit_page_id"]
             for idx in range(n_items):
                 keys_to_delete += [f"p_name_{idx}", f"p_price_{idx}", f"p_qty_{idx}"]
             for k in keys_to_delete:
@@ -281,15 +301,26 @@ if reg_sub == "🛒 仕入れを登録する":
     st.markdown("**📋 保存済み仕入れ記録（直近20件）**")
     purchase_logs = load_purchase_records(limit=20)
     if purchase_logs:
-        import pandas as _pd2
-        df = _pd2.DataFrame([{
-            "仕入日":       r["purchase_date"],
-            "取引先":       r["supplier"],
-            "商品名":       r["product_name"],
-            "商品単価合計": f"¥{r['total_unit_price']:.1f}",
-            "仕入個数":     r["quantity"],
-        } for r in purchase_logs])
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        for r in purchase_logs:
+            c1, c2, c3, c4, c5, c6 = st.columns([2, 2, 3, 2, 1, 1])
+            c1.caption(r["purchase_date"])
+            c2.caption(r["supplier"])
+            c3.caption(r["product_name"])
+            c4.caption(f"¥{r['total_unit_price']:.1f}")
+            c5.caption(f"{r['quantity']}個")
+            if c6.button("✏️ 修正", key=f"edit_p_{r['page_id']}"):
+                st.session_state["p_edit_page_id"] = r["page_id"]
+                st.session_state["p_date"]     = r["purchase_date"]
+                st.session_state["p_supplier"] = r["supplier"]
+                st.session_state["p_tax"]      = r["tax_type"]
+                st.session_state["p_shipping"] = float(r["shipping"])
+                st.session_state["p_note"]     = r["note"]
+                st.session_state["purchase_items"] = [{
+                    "name":       r["product_name"],
+                    "unit_price": float(r["unit_price"]),
+                    "quantity":   int(r["quantity"]),
+                }]
+                st.rerun()
     else:
         st.caption("まだ仕入れ記録がありません。")
 
@@ -328,12 +359,19 @@ if reg_sub == "💴 決まった売値の登録":
     dec_price = st.text_input("金額（円）", key="dec_price", placeholder="例：500円")
     dec_note  = st.text_input("備考（任意）", key="dec_note", placeholder="例：パンダ広場・いきいき共通")
 
-    if st.button("💾 保存する", key="dec_save"):
+    dec_edit_page_id = st.session_state.get("dec_edit_page_id")
+    if dec_edit_page_id:
+        st.info("✏️ 修正モード：上書き保存されます")
+
+    if st.button("💾 修正を保存する" if dec_edit_page_id else "💾 保存する", key="dec_save"):
         if dec_item and dec_price:
-            ok = save_accounting_decision(dec_item, "🏷️ 売値", dec_qty, dec_price, dec_note)
+            if dec_edit_page_id:
+                ok = update_accounting_decision(dec_edit_page_id, dec_item, dec_qty, dec_price, dec_note)
+            else:
+                ok = save_accounting_decision(dec_item, "🏷️ 売値", dec_qty, dec_price, dec_note)
             if ok:
-                st.success("✅ 決め事を保存しました！")
-                for k in ("dec_item", "dec_qty", "dec_price", "dec_note"):
+                st.success("✅ 修正を保存しました！" if dec_edit_page_id else "✅ 決め事を保存しました！")
+                for k in ("dec_item", "dec_qty", "dec_price", "dec_note", "dec_edit_page_id"):
                     st.session_state.pop(k, None)
                 st.rerun()
             else:
@@ -345,10 +383,17 @@ if reg_sub == "💴 決まった売値の登録":
     if decisions:
         st.markdown("**📋 登録済みの決め事**")
         for d in decisions:
-            cat   = d.get("category", "")
-            qty   = f"　{d['quantity']}" if d.get("quantity") else ""
-            note  = f"　（{d['note']}）" if d.get("note") else ""
-            st.markdown(f"- {cat} **{d['item_name']}**{qty}　→　{d['price']}{note}")
+            qty  = f"　{d['quantity']}" if d.get("quantity") else ""
+            note = f"　（{d['note']}）" if d.get("note") else ""
+            c1, c2 = st.columns([8, 1])
+            c1.markdown(f"**{d['item_name']}**{qty}　→　{d['price']}{note}")
+            if c2.button("✏️", key=f"edit_d_{d['page_id']}"):
+                st.session_state["dec_edit_page_id"] = d["page_id"]
+                st.session_state["dec_item"]  = d["item_name"]
+                st.session_state["dec_qty"]   = d["quantity"]
+                st.session_state["dec_price"] = d["price"]
+                st.session_state["dec_note"]  = d["note"]
+                st.rerun()
     else:
         st.caption("まだ決め事が登録されていません。")
 

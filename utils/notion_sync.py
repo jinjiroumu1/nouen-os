@@ -232,6 +232,7 @@ def load_accounting_decisions() -> list[dict]:
                 note_text    = "".join(r.get("plain_text", "") for r in note_val)
                 if item_name or price_text:
                     items.append({
+                        "page_id":   page["id"],
                         "item_name": item_name,
                         "category":  category,
                         "quantity":  quantity,
@@ -245,6 +246,63 @@ def load_accounting_decisions() -> list[dict]:
     except Exception as e:
         st.warning(f"Notion取得エラー（会計決め事）: {e}")
         return []
+
+
+def update_accounting_decision(page_id: str, item_name: str, quantity: str, price: str, note: str) -> bool:
+    """会計決め事の既存ページを上書き更新する。"""
+    client = _get_client()
+    if not client:
+        return False
+    try:
+        client.pages.update(
+            page_id=page_id,
+            properties={
+                "品物名": _title(item_name),
+                "量":     _rich_text(quantity),
+                "金額":   _rich_text(price),
+                "備考":   _rich_text(note),
+            },
+        )
+        return True
+    except Exception as e:
+        st.warning(f"Notion更新エラー（会計決め事）: {e}")
+        return False
+
+
+def update_purchase_record(
+    page_id: str,
+    purchase_date: str,
+    supplier: str,
+    product_name: str,
+    unit_price: float,
+    quantity: int,
+    shipping: float,
+    tax_type: str,
+    total_unit_price: float,
+    note: str,
+) -> tuple[bool, str]:
+    """仕入れ記録の既存ページを上書き更新する。"""
+    client = _get_client()
+    if not client:
+        return False, "Notionクライアント初期化失敗"
+    try:
+        client.pages.update(
+            page_id=page_id,
+            properties={
+                "商品名":       _title(product_name),
+                "仕入日":       _date(purchase_date),
+                "取引先":       _rich_text(supplier),
+                "商品単価":     {"number": unit_price},
+                "仕入個数":     {"number": quantity},
+                "送料":         {"number": shipping},
+                "消費税区分":   _select(tax_type),
+                "商品単価合計": {"number": total_unit_price},
+                "備考":         _rich_text(note),
+            },
+        )
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 
 def _get_or_create_purchase_db(client) -> str | None:
@@ -339,11 +397,16 @@ def load_purchase_records(limit: int = 20) -> list[dict]:
                 d = props.get(key, {}).get("date") or {}
                 return d.get("start", "")
             items.append({
+                "page_id":          page["id"],
                 "purchase_date":    _date("仕入日"),
                 "supplier":         _txt("取引先"),
                 "product_name":     _title("商品名"),
+                "unit_price":       _num("商品単価"),
                 "total_unit_price": _num("商品単価合計"),
                 "quantity":         _num("仕入個数"),
+                "shipping":         _num("送料"),
+                "tax_type":         (props.get("消費税区分", {}).get("select") or {}).get("name", "税込"),
+                "note":             _txt("備考"),
             })
         return items
     except Exception as e:
