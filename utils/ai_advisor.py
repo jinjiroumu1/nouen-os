@@ -436,7 +436,11 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
         from utils.notion_sync import load_accounting_decisions
         decisions = load_accounting_decisions()
         if decisions:
-            lines = [f"・{d['title']}：{d['content']}" for d in decisions]
+            lines = [
+                f"・[{d.get('category','')}] {d['item_name']} {d.get('quantity','')}＝{d['price']}"
+                + (f"（{d['note']}）" if d.get("note") else "")
+                for d in decisions
+            ]
             decisions_text = "\n".join(lines)
     except Exception:
         pass

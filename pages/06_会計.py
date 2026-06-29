@@ -13,6 +13,29 @@ if _img.exists():
 st.title("💰 会計・原価管理")
 st.caption("販売・原価・支払いをAI勘ちゃんと一緒に確認する")
 
+st.markdown("""
+<style>
+/* タブ全体 */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+}
+/* 非選択タブ */
+.stTabs [data-baseweb="tab"] {
+    background-color: #f0f0f0;
+    border-radius: 8px 8px 0 0;
+    padding: 8px 24px;
+    font-weight: 600;
+    color: #555;
+}
+/* 選択中タブ */
+.stTabs [aria-selected="true"] {
+    background-color: #2e7d32;
+    color: #ffffff !important;
+    border-radius: 8px 8px 0 0;
+}
+</style>
+""", unsafe_allow_html=True)
+
 tab_ask, tab_reg = st.tabs(["💬 質問する", "📝 登録する"])
 
 # ══════════════════════════════════════════════════════
@@ -109,24 +132,30 @@ with tab_reg:
     st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
 
     with st.form("decision_form", clear_on_submit=True):
-        dec_title   = st.text_input("タイトル", placeholder="例：ネーブルオレンジの売値")
-        dec_content = st.text_input("内容",     placeholder="例：500円")
-        submitted   = st.form_submit_button("💾 保存する")
+        dec_category = st.radio("カテゴリ", ["🏷️ 売値", "📋 ルール"], horizontal=True)
+        dec_item     = st.text_input("品物名",        placeholder="例：ネーブルオレンジ")
+        dec_qty      = st.text_input("量",             placeholder="例：1個、1kg、1箱")
+        dec_price    = st.text_input("金額（円）",     placeholder="例：500円")
+        dec_note     = st.text_input("備考（任意）",   placeholder="例：パンダ広場・いきいき共通")
+        submitted    = st.form_submit_button("💾 保存する")
         if submitted:
-            if dec_title and dec_content:
-                ok = save_accounting_decision(dec_title, dec_content)
+            if dec_item and dec_price:
+                ok = save_accounting_decision(dec_item, dec_category, dec_qty, dec_price, dec_note)
                 if ok:
                     st.success("✅ 決め事を保存しました！")
                 else:
                     st.error("保存に失敗しました。Notion設定を確認してください。")
             else:
-                st.warning("タイトルと内容を両方入力してください。")
+                st.warning("品物名と金額は必須です。")
 
     decisions = load_accounting_decisions()
     if decisions:
         st.markdown("**📋 登録済みの決め事**")
         for d in decisions:
-            st.markdown(f"- **{d['title']}**：{d['content']}")
+            cat   = d.get("category", "")
+            qty   = f"　{d['quantity']}" if d.get("quantity") else ""
+            note  = f"　（{d['note']}）" if d.get("note") else ""
+            st.markdown(f"- {cat} **{d['item_name']}**{qty}　→　{d['price']}{note}")
     else:
         st.caption("まだ決め事が登録されていません。")
 

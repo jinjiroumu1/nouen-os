@@ -176,8 +176,11 @@ def _get_or_create_decisions_db(client) -> str | None:
             parent={"page_id": ACCOUNTING_DECISIONS_PAGE_ID},
             title=[{"text": {"content": "会計決め事"}}],
             properties={
-                "タイトル": {"title": {}},
-                "内容":     {"rich_text": {}},
+                "品物名":   {"title": {}},
+                "カテゴリ": {"select": {}},
+                "量":       {"rich_text": {}},
+                "金額":     {"rich_text": {}},
+                "備考":     {"rich_text": {}},
                 "日時":     {"date": {}},
             },
         )
@@ -187,7 +190,7 @@ def _get_or_create_decisions_db(client) -> str | None:
         return None
 
 
-def save_accounting_decision(title: str, content: str) -> bool:
+def save_accounting_decision(item_name: str, category: str, quantity: str, price: str, note: str) -> bool:
     """会計決め事をDBに保存する。成功時True。"""
     client = _get_client()
     if not client:
@@ -200,8 +203,11 @@ def save_accounting_decision(title: str, content: str) -> bool:
         client.pages.create(
             parent={"database_id": db_id},
             properties={
-                "タイトル": _title(title),
-                "内容":     _rich_text(content),
+                "品物名":   _title(item_name),
+                "カテゴリ": _select(category),
+                "量":       _rich_text(quantity),
+                "金額":     _rich_text(price),
+                "備考":     _rich_text(note),
                 "日時":     _date(now),
             },
         )
@@ -233,12 +239,24 @@ def load_accounting_decisions() -> list[dict]:
             res = client.databases.query(**params)
             for page in res.get("results", []):
                 props = page.get("properties", {})
-                t_val = props.get("タイトル", {}).get("title", [])
-                c_val = props.get("内容", {}).get("rich_text", [])
-                title_text   = "".join(r.get("plain_text", "") for r in t_val)
-                content_text = "".join(r.get("plain_text", "") for r in c_val)
-                if title_text or content_text:
-                    items.append({"title": title_text, "content": content_text})
+                name_val  = props.get("品物名", {}).get("title", [])
+                cat_val   = props.get("カテゴリ", {})
+                qty_val   = props.get("量", {}).get("rich_text", [])
+                price_val = props.get("金額", {}).get("rich_text", [])
+                note_val  = props.get("備考", {}).get("rich_text", [])
+                item_name    = "".join(r.get("plain_text", "") for r in name_val)
+                category     = (cat_val.get("select") or {}).get("name", "")
+                quantity     = "".join(r.get("plain_text", "") for r in qty_val)
+                price_text   = "".join(r.get("plain_text", "") for r in price_val)
+                note_text    = "".join(r.get("plain_text", "") for r in note_val)
+                if item_name or price_text:
+                    items.append({
+                        "item_name": item_name,
+                        "category":  category,
+                        "quantity":  quantity,
+                        "price":     price_text,
+                        "note":      note_text,
+                    })
             if not res.get("has_more"):
                 break
             cursor = res.get("next_cursor")
