@@ -13,241 +13,248 @@ if _img.exists():
 st.title("💰 会計・原価管理")
 st.caption("販売・原価・支払いをAI勘ちゃんと一緒に確認する")
 
-# ── チャット ──────────────────────────────────────────────
-st.subheader("💬 AI勘ちゃんに質問する")
-st.caption("原価・売上・支払いについて何でも聞いてください。")
+tab_ask, tab_reg = st.tabs(["💬 質問する", "📝 登録する"])
 
-if "accounting_chat" not in st.session_state:
-    st.session_state.accounting_chat = []
+# ══════════════════════════════════════════════════════
+# タブ① 質問する
+# ══════════════════════════════════════════════════════
+with tab_ask:
 
-col_input, col_send = st.columns([5, 1])
-with col_input:
-    user_input = st.text_input(
-        "質問を入力",
-        placeholder="例：なすのあげびたしの原価率は？　パンダ広場の売上合計は？",
-        label_visibility="collapsed",
-        key="accounting_text_input",
-    )
-with col_send:
-    send = st.button("送信", use_container_width=True)
+    # ── AI勘ちゃんに質問 ──────────────────────────────
+    st.subheader("💬 AI勘ちゃんに質問する")
+    st.caption("原価・売上・支払いについて何でも聞いてください。")
 
-if send and user_input:
-    with st.spinner("勘ちゃんが数字を確認しています…"):
-        reply = get_ai_response_accounting(user_input, st.session_state.accounting_chat)
-    st.session_state.accounting_chat.append({"role": "user", "content": user_input})
-    st.session_state.accounting_chat.append({"role": "assistant", "content": reply})
-    save_accounting_log(user_input, reply)
-
-# 履歴表示
-if st.session_state.accounting_chat:
-    st.markdown("---")
-    st.markdown("**📋 やり取りの履歴**")
-    for msg in st.session_state.accounting_chat:
-        if msg["role"] == "user":
-            st.info(f"**👨‍💼 質問：** {msg['content']}")
-        else:
-            st.success(f"**🌱 勘ちゃん：** {msg['content']}")
-
-    if st.button("チャットをリセット"):
+    if "accounting_chat" not in st.session_state:
         st.session_state.accounting_chat = []
-        st.rerun()
 
-st.markdown("---")
+    col_input, col_send = st.columns([5, 1])
+    with col_input:
+        user_input = st.text_input(
+            "質問を入力",
+            placeholder="例：なすのあげびたしの原価率は？　パンダ広場の売上合計は？",
+            label_visibility="collapsed",
+            key="accounting_text_input",
+        )
+    with col_send:
+        send = st.button("送信", use_container_width=True)
 
-# ── 決め事管理 ────────────────────────────────────────────
-st.subheader("📌 決め事を登録する")
-st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
+    if send and user_input:
+        with st.spinner("勘ちゃんが数字を確認しています…"):
+            reply = get_ai_response_accounting(user_input, st.session_state.accounting_chat)
+        st.session_state.accounting_chat.append({"role": "user", "content": user_input})
+        st.session_state.accounting_chat.append({"role": "assistant", "content": reply})
+        save_accounting_log(user_input, reply)
 
-with st.form("decision_form", clear_on_submit=True):
-    dec_title   = st.text_input("タイトル", placeholder="例：ネーブルオレンジの売値")
-    dec_content = st.text_input("内容",     placeholder="例：500円")
-    submitted   = st.form_submit_button("💾 保存する")
-    if submitted:
-        if dec_title and dec_content:
-            ok = save_accounting_decision(dec_title, dec_content)
-            if ok:
-                st.success("✅ 決め事を保存しました！")
+    if st.session_state.accounting_chat:
+        st.markdown("---")
+        st.markdown("**📋 やり取りの履歴**")
+        for msg in st.session_state.accounting_chat:
+            if msg["role"] == "user":
+                st.info(f"**👨‍💼 質問：** {msg['content']}")
             else:
-                st.error("保存に失敗しました。Notion設定を確認してください。")
-        else:
-            st.warning("タイトルと内容を両方入力してください。")
+                st.success(f"**🌱 勘ちゃん：** {msg['content']}")
 
-decisions = load_accounting_decisions()
-if decisions:
-    st.markdown("**📋 登録済みの決め事**")
-    for d in decisions:
-        st.markdown(f"- **{d['title']}**：{d['content']}")
-else:
-    st.caption("まだ決め事が登録されていません。")
-
-st.markdown("---")
-
-# ── 納品書写真読み取り（複数商品対応）────────────────────
-st.subheader("📷 納品書写真から原価計算")
-st.caption("納品書をアップロードすると複数商品をまとめて読み取ります。")
-
-uploaded = st.file_uploader("納品書画像（JPG / PNG）", type=["jpg", "jpeg", "png"])
-
-if uploaded:
-    st.image(uploaded, width=300)
-    if st.button("🔍 AIで情報を抽出する"):
-        with st.spinner("勘ちゃんが読み取っています…"):
-            mime = "image/jpeg" if uploaded.type in ("image/jpeg", "image/jpg") else "image/png"
-            img_bytes = uploaded.read()
-            result = extract_delivery_note(img_bytes, mime)
-        if "error" in result:
-            st.error(f"抽出エラー: {result['error']}")
-        else:
-            # items が空またはない場合は1商品として補完
-            items = result.get("items") or []
-            if not items:
-                items = [{"product_name": "", "purchase_price": 0, "total_quantity": 0, "unit_quantity": 0, "unit": "g"}]
-            st.session_state["dn_date"]         = str(result.get("date") or "")
-            st.session_state["dn_farmer"]       = str(result.get("farmer_name") or "")
-            st.session_state["dn_shipping"]     = float(result.get("shipping_fee") or 0)
-            st.session_state["dn_items"]        = items
-            st.session_state["dn_image"]        = img_bytes
-            st.session_state["dn_orig_name"]    = uploaded.name
-            st.success(f"抽出完了！{len(items)} 商品を読み取りました。")
-
-# ── 編集フォーム ──────────────────────────────────────────
-if "dn_items" in st.session_state:
-    st.markdown("#### 抽出結果（編集可能）")
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        date = st.text_input("日付", value=st.session_state["dn_date"], key="edit_date")
-    with col2:
-        farmer_name = st.text_input("農家さん・仕入先", value=st.session_state["dn_farmer"], key="edit_farmer")
-    with col3:
-        shipping_fee = st.number_input("送料合計（円）", value=st.session_state["dn_shipping"], step=1.0, key="edit_shipping")
-
-    st.markdown("---")
-    st.markdown("**商品ごとの内訳**（送料は商品数で按分）")
-
-    items = st.session_state["dn_items"]
-    n = len(items)
-    shipping_per_item = shipping_fee / n if n > 0 else 0
-
-    edited_items = []
-    for i, item in enumerate(items):
-        st.markdown(f"**商品 {i+1}**")
-        c1, c2, c3, c4, c5, c6, c7 = st.columns([3, 2, 2, 2, 1, 2, 1])
-        with c1:
-            pname = st.text_input("商品名", value=str(item.get("product_name") or ""), key=f"pname_{i}")
-        with c2:
-            pprice = st.number_input("仕入価格（円）", value=float(item.get("purchase_price") or 0), step=1.0, key=f"pprice_{i}")
-        with c3:
-            tq = st.number_input("全体の数量", value=float(item.get("total_quantity") or item.get("total_weight") or 0), step=1.0, key=f"tq_{i}")
-        with c4:
-            uq = st.number_input("1商品の数量", value=float(item.get("unit_quantity") or item.get("unit_weight") or 0), step=1.0, key=f"uq_{i}")
-        with c5:
-            default_unit = item.get("unit", "g")
-            unit_idx = 0 if default_unit == "g" else 1
-            unit = st.radio("単位", ["g", "個"], index=unit_idx, horizontal=True, key=f"unit_{i}")
-        with c6:
-            sp = st.number_input("販売価格（円）", value=0.0, step=1.0, key=f"sp_{i}")
-        with c7:
-            if st.button("🗑️", key=f"del_{i}") and n > 1:
-                st.session_state["dn_items"].pop(i)
-                st.rerun()
-
-        cost = (pprice + shipping_per_item) * uq / tq if tq > 0 else 0.0
-        gross = sp - cost
-        st.caption(f"按分送料: ¥{shipping_per_item:.1f}　原価: ¥{cost:.1f}　粗利: ¥{gross:.1f}")
-
-        edited_items.append({
-            "product_name": pname,
-            "purchase_price": pprice,
-            "total_quantity": tq,
-            "unit_quantity": uq,
-            "unit": unit,
-            "selling_price": sp,
-            "cost": cost,
-            "gross": gross,
-        })
-
-    if st.button("➕ 行を追加"):
-        st.session_state["dn_items"].append({"product_name": "", "purchase_price": 0, "total_quantity": 0, "unit_quantity": 0, "unit": "g"})
-        st.rerun()
-
-    st.markdown("---")
-    note = st.text_input("備考（K列・全行共通）", value="", key="edit_note")
-
-    if st.button("📊 まとめて保存"):
-        # 写真をDriveにアップロード
-        photo_link = ""
-        img_bytes = st.session_state.get("dn_image")
-        if img_bytes:
-            safe_date = date.replace("/", "-").replace(" ", "")
-            fname = f"納品書_{safe_date}_{farmer_name}.jpg"
-            with st.spinner("写真をGoogle Driveに保存しています…"):
-                photo_link = upload_delivery_photo(img_bytes, fname) or ""
-
-        errors = []
-        for item in edited_items:
-            row = [
-                date,
-                item["product_name"],
-                farmer_name,
-                item["purchase_price"],
-                round(shipping_per_item, 1),
-                item["total_quantity"],
-                item["unit_quantity"],
-                item["unit"],
-                round(item["cost"], 1),
-                item["selling_price"],
-                round(item["gross"], 1),
-                note,
-                photo_link,
-            ]
-            if not append_cost_row(row):
-                errors.append(item["product_name"])
-
-        if errors:
-            st.error(f"以下の行の保存に失敗しました: {', '.join(errors)}")
-        else:
-            st.success(f"{len(edited_items)} 行を保存しました！" + ("　📸 写真も保存しました。" if photo_link else ""))
-            for key in ("dn_date", "dn_farmer", "dn_shipping", "dn_items", "dn_image", "dn_orig_name"):
-                st.session_state.pop(key, None)
+        if st.button("チャットをリセット"):
+            st.session_state.accounting_chat = []
             st.rerun()
 
-st.markdown("---")
+    st.markdown("---")
 
-# ── 納品書検索 ────────────────────────────────────────────
-st.subheader("🔍 納品書を検索")
-st.caption("仕入先名・商品名・日付などのキーワードでGoogle Drive内の納品書画像を検索します。")
+    # ── 納品書検索 ────────────────────────────────────
+    st.subheader("🔍 納品書を検索")
+    st.caption("仕入先名・商品名・日付などのキーワードでGoogle Drive内の納品書画像を検索します。")
 
-search_kw = st.text_input("キーワードを入力", placeholder="例：二見酒店　しょうが　20260621", key="photo_search")
+    search_kw = st.text_input("キーワードを入力", placeholder="例：二見酒店　しょうが　20260621", key="photo_search")
 
-if search_kw:
-    with st.spinner("検索中…"):
-        photo_results = search_delivery_photos(search_kw)
+    if search_kw:
+        with st.spinner("検索中…"):
+            photo_results = search_delivery_photos(search_kw)
 
-    if not photo_results:
-        st.info("該当する納品書が見つかりませんでした。")
-    else:
-        st.success(f"{len(photo_results)} 件見つかりました")
-        cols = st.columns(3)
-        for idx, item in enumerate(photo_results):
-            with cols[idx % 3]:
-                if item["thumb"]:
-                    st.image(item["thumb"], use_container_width=True)
+        if not photo_results:
+            st.info("該当する納品書が見つかりませんでした。")
+        else:
+            st.success(f"{len(photo_results)} 件見つかりました")
+            cols = st.columns(3)
+            for idx, item in enumerate(photo_results):
+                with cols[idx % 3]:
+                    if item["thumb"]:
+                        st.image(item["thumb"], use_container_width=True)
+                    else:
+                        st.markdown("🖼️ （プレビューなし）")
+                    st.markdown(f"**{item['name']}**")
+                    st.markdown(f"[🔗 Driveで開く]({item['link']})")
+
+    st.markdown("---")
+
+    # ── スプレッドシートデータ確認 ────────────────────
+    with st.expander("📊 読み込み中のスプレッドシートデータ"):
+        sheets_text = load_sheets()
+        if sheets_text:
+            st.text(sheets_text[:2000])
+        else:
+            st.info(
+                "スプレッドシートが未設定です。\n"
+                "Streamlit Cloud の Secrets に以下を追加してください：\n"
+                "SHEET_COST / SHEET_PANDA / SHEET_IKIKI / SHEET_PAYMENT"
+            )
+
+
+# ══════════════════════════════════════════════════════
+# タブ② 登録する
+# ══════════════════════════════════════════════════════
+with tab_reg:
+
+    # ── 決め事（金額）登録 ────────────────────────────
+    st.subheader("📌 金額を決める")
+    st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
+
+    with st.form("decision_form", clear_on_submit=True):
+        dec_title   = st.text_input("タイトル", placeholder="例：ネーブルオレンジの売値")
+        dec_content = st.text_input("内容",     placeholder="例：500円")
+        submitted   = st.form_submit_button("💾 保存する")
+        if submitted:
+            if dec_title and dec_content:
+                ok = save_accounting_decision(dec_title, dec_content)
+                if ok:
+                    st.success("✅ 決め事を保存しました！")
                 else:
-                    st.markdown("🖼️ （プレビューなし）")
-                st.markdown(f"**{item['name']}**")
-                st.markdown(f"[🔗 Driveで開く]({item['link']})")
+                    st.error("保存に失敗しました。Notion設定を確認してください。")
+            else:
+                st.warning("タイトルと内容を両方入力してください。")
 
-st.markdown("---")
-
-# ── スプレッドシートデータ確認 ────────────────────────────
-with st.expander("📊 読み込み中のスプレッドシートデータ"):
-    sheets_text = load_sheets()
-    if sheets_text:
-        st.text(sheets_text[:2000])
+    decisions = load_accounting_decisions()
+    if decisions:
+        st.markdown("**📋 登録済みの決め事**")
+        for d in decisions:
+            st.markdown(f"- **{d['title']}**：{d['content']}")
     else:
-        st.info(
-            "スプレッドシートが未設定です。\n"
-            "Streamlit Cloud の Secrets に以下を追加してください：\n"
-            "SHEET_COST / SHEET_PANDA / SHEET_IKIKI / SHEET_PAYMENT"
-        )
+        st.caption("まだ決め事が登録されていません。")
+
+    st.markdown("---")
+
+    # ── 納品書写真読み取り ────────────────────────────
+    st.subheader("📷 納品書写真から原価計算")
+    st.caption("納品書をアップロードすると複数商品をまとめて読み取ります。")
+
+    uploaded = st.file_uploader("納品書画像（JPG / PNG）", type=["jpg", "jpeg", "png"])
+
+    if uploaded:
+        st.image(uploaded, width=300)
+        if st.button("🔍 AIで情報を抽出する"):
+            with st.spinner("勘ちゃんが読み取っています…"):
+                mime = "image/jpeg" if uploaded.type in ("image/jpeg", "image/jpg") else "image/png"
+                img_bytes = uploaded.read()
+                result = extract_delivery_note(img_bytes, mime)
+            if "error" in result:
+                st.error(f"抽出エラー: {result['error']}")
+            else:
+                items = result.get("items") or []
+                if not items:
+                    items = [{"product_name": "", "purchase_price": 0, "total_quantity": 0, "unit_quantity": 0, "unit": "g"}]
+                st.session_state["dn_date"]      = str(result.get("date") or "")
+                st.session_state["dn_farmer"]    = str(result.get("farmer_name") or "")
+                st.session_state["dn_shipping"]  = float(result.get("shipping_fee") or 0)
+                st.session_state["dn_items"]     = items
+                st.session_state["dn_image"]     = img_bytes
+                st.session_state["dn_orig_name"] = uploaded.name
+                st.success(f"抽出完了！{len(items)} 商品を読み取りました。")
+
+    if "dn_items" in st.session_state:
+        st.markdown("#### 抽出結果（編集可能）")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            date = st.text_input("日付", value=st.session_state["dn_date"], key="edit_date")
+        with col2:
+            farmer_name = st.text_input("農家さん・仕入先", value=st.session_state["dn_farmer"], key="edit_farmer")
+        with col3:
+            shipping_fee = st.number_input("送料合計（円）", value=st.session_state["dn_shipping"], step=1.0, key="edit_shipping")
+
+        st.markdown("---")
+        st.markdown("**商品ごとの内訳**（送料は商品数で按分）")
+
+        items = st.session_state["dn_items"]
+        n = len(items)
+        shipping_per_item = shipping_fee / n if n > 0 else 0
+
+        edited_items = []
+        for i, item in enumerate(items):
+            st.markdown(f"**商品 {i+1}**")
+            c1, c2, c3, c4, c5, c6, c7 = st.columns([3, 2, 2, 2, 1, 2, 1])
+            with c1:
+                pname = st.text_input("商品名", value=str(item.get("product_name") or ""), key=f"pname_{i}")
+            with c2:
+                pprice = st.number_input("仕入価格（円）", value=float(item.get("purchase_price") or 0), step=1.0, key=f"pprice_{i}")
+            with c3:
+                tq = st.number_input("全体の数量", value=float(item.get("total_quantity") or item.get("total_weight") or 0), step=1.0, key=f"tq_{i}")
+            with c4:
+                uq = st.number_input("1商品の数量", value=float(item.get("unit_quantity") or item.get("unit_weight") or 0), step=1.0, key=f"uq_{i}")
+            with c5:
+                default_unit = item.get("unit", "g")
+                unit_idx = 0 if default_unit == "g" else 1
+                unit = st.radio("単位", ["g", "個"], index=unit_idx, horizontal=True, key=f"unit_{i}")
+            with c6:
+                sp = st.number_input("販売価格（円）", value=0.0, step=1.0, key=f"sp_{i}")
+            with c7:
+                if st.button("🗑️", key=f"del_{i}") and n > 1:
+                    st.session_state["dn_items"].pop(i)
+                    st.rerun()
+
+            cost = (pprice + shipping_per_item) * uq / tq if tq > 0 else 0.0
+            gross = sp - cost
+            st.caption(f"按分送料: ¥{shipping_per_item:.1f}　原価: ¥{cost:.1f}　粗利: ¥{gross:.1f}")
+
+            edited_items.append({
+                "product_name": pname,
+                "purchase_price": pprice,
+                "total_quantity": tq,
+                "unit_quantity": uq,
+                "unit": unit,
+                "selling_price": sp,
+                "cost": cost,
+                "gross": gross,
+            })
+
+        if st.button("➕ 行を追加"):
+            st.session_state["dn_items"].append({"product_name": "", "purchase_price": 0, "total_quantity": 0, "unit_quantity": 0, "unit": "g"})
+            st.rerun()
+
+        st.markdown("---")
+        note = st.text_input("備考（K列・全行共通）", value="", key="edit_note")
+
+        if st.button("📊 まとめて保存"):
+            photo_link = ""
+            img_bytes = st.session_state.get("dn_image")
+            if img_bytes:
+                safe_date = date.replace("/", "-").replace(" ", "")
+                fname = f"納品書_{safe_date}_{farmer_name}.jpg"
+                with st.spinner("写真をGoogle Driveに保存しています…"):
+                    photo_link = upload_delivery_photo(img_bytes, fname) or ""
+
+            errors = []
+            for item in edited_items:
+                row = [
+                    date,
+                    item["product_name"],
+                    farmer_name,
+                    item["purchase_price"],
+                    round(shipping_per_item, 1),
+                    item["total_quantity"],
+                    item["unit_quantity"],
+                    item["unit"],
+                    round(item["cost"], 1),
+                    item["selling_price"],
+                    round(item["gross"], 1),
+                    note,
+                    photo_link,
+                ]
+                if not append_cost_row(row):
+                    errors.append(item["product_name"])
+
+            if errors:
+                st.error(f"以下の行の保存に失敗しました: {', '.join(errors)}")
+            else:
+                st.success(f"{len(edited_items)} 行を保存しました！" + ("　📸 写真も保存しました。" if photo_link else ""))
+                for key in ("dn_date", "dn_farmer", "dn_shipping", "dn_items", "dn_image", "dn_orig_name"):
+                    st.session_state.pop(key, None)
+                st.rerun()
