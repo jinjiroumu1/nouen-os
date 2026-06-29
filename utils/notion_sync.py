@@ -315,6 +315,47 @@ def save_purchase_record(
         return False
 
 
+def load_purchase_records(limit: int = 20) -> list[dict]:
+    """仕入れ記録DBから直近のレコードを取得して返す。"""
+    client = _get_client()
+    if not client:
+        return []
+    db_id = _get_or_create_purchase_db(client)
+    if not db_id:
+        return []
+    try:
+        res = client.databases.query(**{
+            "database_id": db_id,
+            "page_size": limit,
+            "sorts": [{"timestamp": "created_time", "direction": "descending"}],
+        })
+        items = []
+        for page in res.get("results", []):
+            props = page.get("properties", {})
+            def _txt(key):
+                p = props.get(key, {})
+                return "".join(r.get("plain_text", "") for r in p.get("rich_text", []))
+            def _title(key):
+                p = props.get(key, {})
+                return "".join(r.get("plain_text", "") for r in p.get("title", []))
+            def _num(key):
+                return props.get(key, {}).get("number") or 0
+            def _date(key):
+                d = props.get(key, {}).get("date") or {}
+                return d.get("start", "")
+            items.append({
+                "purchase_date":    _date("仕入日"),
+                "supplier":         _txt("取引先"),
+                "product_name":     _title("商品名"),
+                "total_unit_price": _num("商品単価合計"),
+                "quantity":         _num("仕入個数"),
+            })
+        return items
+    except Exception as e:
+        st.warning(f"Notion取得エラー（仕入れ記録）: {e}")
+        return []
+
+
 def save_pop_log(question: str, answer: str):
     """POPページの子DBに質問・回答を保存する。"""
     client = _get_client()

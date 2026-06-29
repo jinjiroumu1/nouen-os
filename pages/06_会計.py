@@ -1,7 +1,7 @@
 import streamlit as st
 from utils.ai_advisor import get_ai_response_accounting, extract_delivery_note
 from utils.sheets_loader import load_sheets, append_cost_row, upload_delivery_photo, search_delivery_photos
-from utils.notion_sync import save_accounting_log, save_accounting_decision, load_accounting_decisions, save_purchase_record
+from utils.notion_sync import save_accounting_log, save_accounting_decision, load_accounting_decisions, save_purchase_record, load_purchase_records
 from pathlib import Path as _P
 
 st.set_page_config(page_title="会計・原価管理", page_icon="💰", layout="wide")
@@ -271,6 +271,23 @@ if reg_sub == "🛒 仕入れを登録する":
             for k in ("p_date", "p_supplier", "p_tax", "p_shipping", "p_note"):
                 st.session_state.pop(k, None)
             st.rerun()
+
+    # ── 保存済み仕入れ記録 ───────────────────────────
+    st.markdown("---")
+    st.markdown("**📋 保存済み仕入れ記録（直近20件）**")
+    purchase_logs = load_purchase_records(limit=20)
+    if purchase_logs:
+        import pandas as _pd2
+        df = _pd2.DataFrame([{
+            "仕入日":       r["purchase_date"],
+            "取引先":       r["supplier"],
+            "商品名":       r["product_name"],
+            "商品単価合計": f"¥{r['total_unit_price']:.1f}",
+            "仕入個数":     r["quantity"],
+        } for r in purchase_logs])
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.caption("まだ仕入れ記録がありません。")
 
 if reg_sub == "💴 決まった売値の登録":
     # ── 決まった売値の登録 ──────────────────────────
