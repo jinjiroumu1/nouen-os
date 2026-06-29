@@ -196,6 +196,7 @@ def _base_system(kenjin, past, role_desc):
 
 
 def _call_claude(system, first_message, chat_history, use_books=True, extra_pdfs=None, book_keywords=None):
+    import streamlit as st
     client = _claude()
     if not client:
         return (
@@ -203,44 +204,9 @@ def _call_claude(system, first_message, chat_history, use_books=True, extra_pdfs
             "Streamlit Cloud の Secrets に追加してください。"
         )
 
-    # PDF/Wordブロックを取得（use_books=False の場合はスキップ）
+    # ── PDF/Word は一時的に無効化（BadRequestError 診断中）────
+    # use_books = False  ← 強制無効
     pdf_blocks = []
-    if use_books:
-        if book_keywords:
-            from utils.book_loader import load_relevant_books
-            books = load_relevant_books(book_keywords)
-        else:
-            from utils.book_loader import load_books
-            books = load_books()
-        word_texts = []
-        for b in books:
-            if b.get("type") == "word":
-                word_texts.append(f"【{b['name']}】\n{b['text'][:3000]}")
-            else:
-                pdf_blocks.append({
-                    "type": "document",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "application/pdf",
-                        "data": b["data"],
-                    },
-                    "title": b["name"],
-                })
-        if word_texts:
-            system = system + "\n\n【基本書（Word）】\n" + "\n\n".join(word_texts)
-
-    # 追加PDF（請求書など）
-    if extra_pdfs:
-        for b in extra_pdfs:
-            pdf_blocks.append({
-                "type": "document",
-                "source": {
-                    "type": "base64",
-                    "media_type": "application/pdf",
-                    "data": b["data"],
-                },
-                "title": b["name"],
-            })
 
     # スプレッドシートデータをシステムプロンプトに追加
     from utils.sheets_loader import load_sheets
@@ -248,20 +214,26 @@ def _call_claude(system, first_message, chat_history, use_books=True, extra_pdfs
     if sheets_text:
         system = system + f"\n\n【販売・原価データ（スプレッドシート）】\n{sheets_text[:3000]}"
 
-    # 最初のメッセージにPDFブロックを付加
-    if pdf_blocks:
-        first_content = pdf_blocks + [{"type": "text", "text": first_message}]
-    else:
-        first_content = first_message
-
+    first_content = first_message
     messages = [{"role": "user", "content": first_content}] + chat_history
-    response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=1200,
-        system=system,
-        messages=messages,
-    )
-    return response.content[0].text
+
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1200,
+            system=system,
+            messages=messages,
+        )
+        return response.content[0].text
+    except Exception as e:
+        err_detail = (
+            f"**Claude API エラー**\n\n"
+            f"```\n{type(e).__name__}: {e}\n```\n\n"
+            f"**system長さ:** {len(system)} 文字  \n"
+            f"**メッセージ数:** {len(messages)}"
+        )
+        st.error(err_detail)
+        return f"⚠️ エラーが発生しました: {type(e).__name__}: {str(e)[:300]}"
 
 
 # ── 農業日誌 ──────────────────────────────────────────────
