@@ -172,26 +172,30 @@ with tab_reg:
 
     # 計算プレビュー
     total_qty = sum(it["quantity"] for it in items)
-    st.markdown("---")
-    st.markdown("**📊 計算プレビュー**")
-    preview_rows = []
-    for it in items:
+    # 計算ロジックを共通化
+    def _calc(it):
         base = it["unit_price"]
-        qty  = it["quantity"]
-        # 消費税
         if p_tax == "税別":
             taxed_price = base * 1.08
-            ship_tax    = (p_shipping / total_qty) * 1.10 if total_qty > 0 else 0
+            ship_per_unit = (p_shipping * 1.10 / total_qty) if total_qty > 0 else 0
         else:
             taxed_price = base
-            ship_tax    = p_shipping / total_qty if total_qty > 0 else 0
-        total_unit = taxed_price + ship_tax
+            ship_per_unit = (p_shipping / total_qty) if total_qty > 0 else 0
+        total_unit = taxed_price + ship_per_unit
+        return taxed_price, ship_per_unit, total_unit
+
+    st.markdown("---")
+    tax_note = "（単価×1.08、送料×1.10で按分）" if p_tax == "税別" else "（税込のまま按分）"
+    st.markdown(f"**📊 計算プレビュー** {tax_note}")
+    preview_rows = []
+    for it in items:
+        taxed_price, ship_per_unit, total_unit = _calc(it)
         preview_rows.append({
-            "商品名": it["name"] or "（未入力）",
-            "単価": f"¥{base:.0f}",
-            "個数": qty,
-            "按分送料": f"¥{ship_tax:.1f}",
-            "商品単価合計": f"¥{total_unit:.1f}",
+            "商品名":           it["name"] or "（未入力）",
+            "単価（税込）":     f"¥{taxed_price:.1f}",
+            "個数":             it["quantity"],
+            "1個あたり按分送料": f"¥{ship_per_unit:.1f}",
+            "商品単価合計":     f"¥{total_unit:.1f}",
         })
     import pandas as _pd
     st.dataframe(_pd.DataFrame(preview_rows), use_container_width=True, hide_index=True)
@@ -199,22 +203,14 @@ with tab_reg:
     if st.button("💾 仕入れを保存する", key="p_save"):
         errors = []
         for it in items:
-            base = it["unit_price"]
-            qty  = it["quantity"]
-            if p_tax == "税別":
-                taxed_price = base * 1.08
-                ship_tax    = (p_shipping / total_qty) * 1.10 if total_qty > 0 else 0
-            else:
-                taxed_price = base
-                ship_tax    = p_shipping / total_qty if total_qty > 0 else 0
-            total_unit = taxed_price + ship_tax
+            taxed_price, ship_per_unit, total_unit = _calc(it)
             ok = save_purchase_record(
                 purchase_date    = str(p_date),
                 supplier         = p_supplier,
                 product_name     = it["name"],
-                unit_price       = base,
-                quantity         = qty,
-                shipping         = p_shipping / len(items) if items else 0,
+                unit_price       = it["unit_price"],
+                quantity         = it["quantity"],
+                shipping         = round(ship_per_unit, 1),
                 tax_type         = p_tax,
                 total_unit_price = round(total_unit, 1),
                 note             = p_note,
