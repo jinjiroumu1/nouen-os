@@ -358,77 +358,42 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
 
     # 3. Notion会計チャットログ（会計ページの子DBを直接検索して取得）
     notion_log = ""
-    notion_debug_info = {"status": "未実行", "db_id": None, "count": 0, "error": None, "lines": []}
     ACCOUNTING_PAGE_ID = "388a73ede493800ea5fdd751647cba5d"
     try:
         from utils.notion_sync import _get_client
         nc = _get_client()
-        if not nc:
-            notion_debug_info["status"] = "Notionクライアント取得失敗（NOTION_TOKEN未設定?）"
-        else:
-            # 会計ページの子ブロックから「会計チャットログ」DBを探す
+        if nc:
             db_id = None
             try:
                 blocks = nc.blocks.children.list(block_id=ACCOUNTING_PAGE_ID, page_size=100)
                 for block in blocks.get("results", []):
                     if block.get("type") == "child_database":
-                        title = block.get("child_database", {}).get("title", "")
-                        notion_debug_info.setdefault("found_dbs", []).append(f"{title}: {block['id']}")
-                        if title == "会計チャットログ":
+                        if block.get("child_database", {}).get("title", "") == "会計チャットログ":
                             db_id = block["id"].replace("-", "")
                             break
-            except Exception as e:
-                notion_debug_info["status"] = f"子ブロック取得エラー: {e}"
+            except Exception:
+                pass
 
-            notion_debug_info["db_id"] = db_id
-            if not db_id:
-                notion_debug_info["status"] = "「会計チャットログ」DBが見つかりません"
-            else:
+            if db_id:
                 res = nc.databases.query(**{"database_id": db_id, "page_size": 50,
                     "sorts": [{"timestamp": "created_time", "direction": "descending"}]})
-                results = res.get("results", [])
-                notion_debug_info["count"] = len(results)
-                notion_debug_info["status"] = f"取得成功: {len(results)}件"
                 price_keywords = {"売値", "販売価格", "決定", "価格", "値段", "円", "単価", "売価"}
                 priority_lines = []
                 other_lines    = []
-                for page in results:
+                for page in res.get("results", []):
                     props = page.get("properties", {})
-                    q_val = props.get("質問", {}).get("title", [])
-                    a_val = props.get("回答", {}).get("rich_text", [])
-                    q_text = "".join(r.get("plain_text", "") for r in q_val)
-                    a_text = "".join(r.get("plain_text", "") for r in a_val)
+                    q_text = "".join(r.get("plain_text", "") for r in props.get("質問", {}).get("title", []))
+                    a_text = "".join(r.get("plain_text", "") for r in props.get("回答", {}).get("rich_text", []))
                     if not q_text and not a_text:
                         continue
                     entry = f"Q: {q_text}\nA: {a_text[:400]}"
-                    notion_debug_info["lines"].append(f"Q: {q_text[:60]} | A: {a_text[:60]}")
                     if any(kw in q_text or kw in a_text for kw in price_keywords):
                         priority_lines.append(entry)
                     else:
                         other_lines.append(entry)
-                all_lines = priority_lines + other_lines
-                notion_log = "\n\n".join(all_lines)
-    except Exception as e:
-        notion_debug_info["status"] = "例外発生"
-        notion_debug_info["error"] = str(e)
-
-    # デバッグ用expander
-    with st.expander("🔍 [デバッグ] Notion会計チャットログ取得状況"):
-        st.write(f"**ステータス:** {notion_debug_info['status']}")
-        st.write(f"**DB ID:** {notion_debug_info['db_id']}")
-        st.write(f"**取得件数:** {notion_debug_info['count']} 件")
-        if notion_debug_info.get("found_dbs"):
-            st.markdown("**会計ページ内の子DB一覧:**")
-            for d in notion_debug_info["found_dbs"]:
-                st.text(d)
-        if notion_debug_info.get("error"):
-            st.error(f"エラー: {notion_debug_info['error']}")
-        if notion_debug_info["lines"]:
-            st.markdown("**取得したQ&Aログ（先頭60文字）:**")
-            for line in notion_debug_info["lines"]:
-                st.text(line)
-        else:
-            st.info("ログが取得できませんでした")
+                notion_log = "\n\n".join(priority_lines + other_lines)
+    except Exception:
+        pass
 
     # 4. 会計決め事DB（全件）
     decisions_text = ""
