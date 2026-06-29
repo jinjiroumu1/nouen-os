@@ -298,9 +298,26 @@ if reg_sub == "💴 決まった売値の登録":
     st.subheader("💴 決まった売値の登録")
     st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
 
+    # 仕入れ済み商品から選ぶ
+    with st.expander("📋 仕入れ済み商品から選ぶ", expanded=False):
+        purchase_recs = load_purchase_records(limit=30)
+        if purchase_recs:
+            for rec in purchase_recs:
+                c1, c2, c3, c4 = st.columns([2, 2, 3, 1])
+                c1.caption(rec["purchase_date"])
+                c2.caption(rec["supplier"])
+                c3.caption(rec["product_name"])
+                if c4.button("選択", key=f"sel_{rec['purchase_date']}_{rec['product_name']}"):
+                    st.session_state["dec_item_preset"] = rec["product_name"]
+                    st.rerun()
+        else:
+            st.caption("まだ仕入れ記録がありません。")
+
+    dec_item_default = st.session_state.pop("dec_item_preset", "")
+
     with st.form("decision_form", clear_on_submit=True):
         dec_category = "🏷️ 売値"
-        dec_item     = st.text_input("品物名",        placeholder="例：ネーブルオレンジ")
+        dec_item     = st.text_input("品物名", value=dec_item_default, placeholder="例：ネーブルオレンジ")
         dec_qty      = st.text_input("量",             placeholder="例：1個、1kg、1箱")
         dec_price    = st.text_input("金額（円）",     placeholder="例：500円")
         dec_note     = st.text_input("備考（任意）",   placeholder="例：パンダ広場・いきいき共通")
