@@ -131,9 +131,29 @@ with tab_ask:
 # タブ② 登録する
 # ══════════════════════════════════════════════════════
 with tab_reg:
-    subtab_purchase, subtab_price = st.tabs(["🛒 仕入れを登録する", "💴 決まった売値の登録"])
+    st.markdown("""
+<style>
+div[data-testid="stRadio"] > div { gap: 6px; }
+div[data-testid="stRadio"] label {
+    font-size: 0.82rem !important;
+    color: #666 !important;
+    padding: 3px 10px;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    background: #f7f7f7;
+}
+div[data-testid="stRadio"] label[data-checked="true"] {
+    background: #e8f5e9 !important;
+    color: #2e7d32 !important;
+    border-color: #a5d6a7 !important;
+    font-weight: 600 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+    reg_sub = st.radio("", ["🛒 仕入れを登録する", "💴 決まった売値の登録"],
+                       horizontal=True, label_visibility="collapsed", key="reg_subtab")
 
-with subtab_purchase:
+if reg_sub == "🛒 仕入れを登録する":
     st.subheader("🛒 仕入れを登録する")
     st.caption("仕入れた商品を記録します。送料・消費税を自動計算してNotionに保存します。")
 
@@ -250,7 +270,7 @@ with subtab_purchase:
             st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
             st.rerun()
 
-with subtab_price:
+if reg_sub == "💴 決まった売値の登録":
     # ── 決まった売値の登録 ──────────────────────────
     st.subheader("💴 決まった売値の登録")
     st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
