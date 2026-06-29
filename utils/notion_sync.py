@@ -376,6 +376,41 @@ def delete_expiry_item(page_id: str):
         st.warning(f"Notion削除エラー: {e}")
 
 
+def load_chat_logs(limit: int = 30) -> list[dict]:
+    """チャット記録DBから直近のログを取得して返す。"""
+    client = _get_client()
+    if not client:
+        return []
+    try:
+        res = client.databases.query(**{
+            "database_id": DB_IDS["chat_logs"],
+            "page_size": limit,
+            "sorts": [{"timestamp": "created_time", "direction": "descending"}],
+        })
+        items = []
+        for page in res.get("results", []):
+            props = page.get("properties", {})
+            q_val = props.get("疑問・問い", {}).get("title", [])
+            a_val = props.get("気づき・回答", {}).get("rich_text", [])
+            t_val = props.get("関連トピック", {}).get("rich_text", [])
+            s_val = props.get("知識の種別", {})
+            question    = "".join(r.get("plain_text", "") for r in q_val)
+            answer      = "".join(r.get("plain_text", "") for r in a_val)
+            topics      = "".join(r.get("plain_text", "") for r in t_val)
+            source_type = (s_val.get("select") or {}).get("name", "")
+            if question:
+                items.append({
+                    "question":      question,
+                    "answer":        answer,
+                    "related_topics": topics,
+                    "source_type":   source_type,
+                })
+        return items
+    except Exception as e:
+        st.warning(f"Notion取得エラー（チャットログ）: {e}")
+        return []
+
+
 def save_chat_log(question, answer, related_topics, source_type):
     client = _get_client()
     if not client:
