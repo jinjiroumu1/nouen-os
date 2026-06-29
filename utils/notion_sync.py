@@ -163,8 +163,9 @@ def save_accounting_log(question: str, answer: str):
         st.warning(f"Notion同期エラー（会計）: {e}")
 
 
-_DECISIONS_PROPS = {
-    "品物名":   {"title": {}},
+# titleプロパティはNotionが「名前」として自動生成するため除外
+# 「品物名」は既存titleプロパティ（「名前」）を流用する
+_DECISIONS_PROPS_EXTRA = {
     "カテゴリ": {"select": {}},
     "量":       {"rich_text": {}},
     "金額":     {"rich_text": {}},
@@ -186,18 +187,18 @@ def _get_or_create_decisions_db(client) -> str | None:
                     break
 
         if db_id is None:
-            # DBが存在しないので正しいプロパティで新規作成
+            # DBが存在しないので新規作成（titleは自動生成される「名前」を使う）
             db = client.databases.create(
                 parent={"page_id": ACCOUNTING_DECISIONS_PAGE_ID},
                 title=[{"text": {"content": "会計決め事"}}],
-                properties=_DECISIONS_PROPS,
+                properties=_DECISIONS_PROPS_EXTRA,
             )
             return db["id"].replace("-", "")
 
-        # 既存DBのプロパティを確認し、不足分だけ追加
+        # 既存DBのプロパティを確認し、不足分だけ追加（titleは除外）
         db_info = client.databases.retrieve(database_id=db_id)
         existing_props = set(db_info.get("properties", {}).keys())
-        missing = {k: v for k, v in _DECISIONS_PROPS.items() if k not in existing_props}
+        missing = {k: v for k, v in _DECISIONS_PROPS_EXTRA.items() if k not in existing_props}
         if missing:
             client.databases.update(database_id=db_id, properties=missing)
 
@@ -220,7 +221,7 @@ def save_accounting_decision(item_name: str, category: str, quantity: str, price
         client.pages.create(
             parent={"database_id": db_id},
             properties={
-                "品物名":   _title(item_name),
+                "名前":     _title(item_name),
                 "カテゴリ": _select(category),
                 "量":       _rich_text(quantity),
                 "金額":     _rich_text(price),
@@ -256,7 +257,7 @@ def load_accounting_decisions() -> list[dict]:
             res = client.databases.query(**params)
             for page in res.get("results", []):
                 props = page.get("properties", {})
-                name_val  = props.get("品物名", {}).get("title", [])
+                name_val  = props.get("名前", {}).get("title", [])
                 cat_val   = props.get("カテゴリ", {})
                 qty_val   = props.get("量", {}).get("rich_text", [])
                 price_val = props.get("金額", {}).get("rich_text", [])
