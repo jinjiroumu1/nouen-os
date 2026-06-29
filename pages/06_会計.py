@@ -298,6 +298,16 @@ if reg_sub == "💴 決まった売値の登録":
     st.subheader("💴 決まった売値の登録")
     st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
 
+    # session_state キー初期化
+    if "dec_item" not in st.session_state:
+        st.session_state["dec_item"] = ""
+    if "dec_qty" not in st.session_state:
+        st.session_state["dec_qty"] = ""
+    if "dec_price" not in st.session_state:
+        st.session_state["dec_price"] = ""
+    if "dec_note" not in st.session_state:
+        st.session_state["dec_note"] = ""
+
     # 仕入れ済み商品から選ぶ
     with st.expander("📋 仕入れ済み商品から選ぶ", expanded=False):
         purchase_recs = load_purchase_records(limit=30)
@@ -308,29 +318,28 @@ if reg_sub == "💴 決まった売値の登録":
                 c2.caption(rec["supplier"])
                 c3.caption(rec["product_name"])
                 if c4.button("選択", key=f"sel_{rec['purchase_date']}_{rec['product_name']}"):
-                    st.session_state["dec_item_preset"] = rec["product_name"]
+                    st.session_state["dec_item"] = rec["product_name"]
                     st.rerun()
         else:
             st.caption("まだ仕入れ記録がありません。")
 
-    dec_item_default = st.session_state.pop("dec_item_preset", "")
+    dec_item  = st.text_input("品物名",    key="dec_item",  placeholder="例：ネーブルオレンジ")
+    dec_qty   = st.text_input("量",        key="dec_qty",   placeholder="例：1個、1kg、1箱")
+    dec_price = st.text_input("金額（円）", key="dec_price", placeholder="例：500円")
+    dec_note  = st.text_input("備考（任意）", key="dec_note", placeholder="例：パンダ広場・いきいき共通")
 
-    with st.form("decision_form", clear_on_submit=True):
-        dec_category = "🏷️ 売値"
-        dec_item     = st.text_input("品物名", value=dec_item_default, placeholder="例：ネーブルオレンジ")
-        dec_qty      = st.text_input("量",             placeholder="例：1個、1kg、1箱")
-        dec_price    = st.text_input("金額（円）",     placeholder="例：500円")
-        dec_note     = st.text_input("備考（任意）",   placeholder="例：パンダ広場・いきいき共通")
-        submitted    = st.form_submit_button("💾 保存する")
-        if submitted:
-            if dec_item and dec_price:
-                ok = save_accounting_decision(dec_item, dec_category, dec_qty, dec_price, dec_note)
-                if ok:
-                    st.success("✅ 決め事を保存しました！")
-                else:
-                    st.error("保存に失敗しました。Notion設定を確認してください。")
+    if st.button("💾 保存する", key="dec_save"):
+        if dec_item and dec_price:
+            ok = save_accounting_decision(dec_item, "🏷️ 売値", dec_qty, dec_price, dec_note)
+            if ok:
+                st.success("✅ 決め事を保存しました！")
+                for k in ("dec_item", "dec_qty", "dec_price", "dec_note"):
+                    st.session_state.pop(k, None)
+                st.rerun()
             else:
-                st.warning("品物名と金額は必須です。")
+                st.error("保存に失敗しました。Notion設定を確認してください。")
+        else:
+            st.warning("品物名と金額は必須です。")
 
     decisions = load_accounting_decisions()
     if decisions:
