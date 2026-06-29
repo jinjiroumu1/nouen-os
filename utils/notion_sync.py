@@ -320,9 +320,7 @@ def load_purchase_records(limit: int = 20) -> list[dict]:
     client = _get_client()
     if not client:
         return []
-    db_id = _get_or_create_purchase_db(client)
-    if not db_id:
-        return []
+    db_id = "38ea73ede49381aaa109e3909bdead98"
     try:
         res = client.databases.query(**{
             "database_id": db_id,
