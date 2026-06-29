@@ -184,6 +184,12 @@ if reg_sub == "🛒 仕入れを登録する":
                     st.session_state["dn_orig_name"] = dn_uploaded.name
                     st.success(f"抽出完了！{len(items_dn)} 商品を読み取りました。下の「📷 納品書写真から原価計算」セクションで確認・保存してください。")
 
+    # プリセットキー → ウィジェットキーへ転送（widget描画前）
+    for _f, _t in [("p_date_pre","p_date"),("p_supplier_pre","p_supplier"),
+                   ("p_tax_pre","p_tax"),("p_shipping_pre","p_shipping"),("p_note_pre","p_note")]:
+        if _f in st.session_state:
+            st.session_state[_t] = st.session_state.pop(_f)
+
     if "purchase_items" not in st.session_state:
         st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
 
@@ -309,13 +315,13 @@ if reg_sub == "🛒 仕入れを登録する":
             c4.caption(f"¥{r['total_unit_price']:.1f}")
             c5.caption(f"{r['quantity']}個")
             if c6.button("✏️ 修正", key=f"edit_p_{r['page_id']}"):
-                st.session_state["p_edit_page_id"] = r["page_id"]
-                st.session_state["p_date"]     = r["purchase_date"]
-                st.session_state["p_supplier"] = r["supplier"]
-                st.session_state["p_tax"]      = r["tax_type"]
-                st.session_state["p_shipping"] = float(r["shipping"])
-                st.session_state["p_note"]     = r["note"]
-                st.session_state["purchase_items"] = [{
+                st.session_state["p_edit_page_id"]  = r["page_id"]
+                st.session_state["p_date_pre"]      = r["purchase_date"]
+                st.session_state["p_supplier_pre"]  = r["supplier"]
+                st.session_state["p_tax_pre"]       = r["tax_type"]
+                st.session_state["p_shipping_pre"]  = float(r["shipping"])
+                st.session_state["p_note_pre"]      = r["note"]
+                st.session_state["purchase_items"]  = [{
                     "name":       r["product_name"],
                     "unit_price": float(r["unit_price"]),
                     "quantity":   int(r["quantity"]),
@@ -329,15 +335,16 @@ if reg_sub == "💴 決まった売値の登録":
     st.subheader("💴 決まった売値の登録")
     st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
 
+    # プリセットキー → ウィジェットキーへ転送（widget描画前に行うことでエラーを回避）
+    for _f, _t in [("dec_item_pre","dec_item"),("dec_qty_pre","dec_qty"),
+                   ("dec_price_pre","dec_price"),("dec_note_pre","dec_note")]:
+        if _f in st.session_state:
+            st.session_state[_t] = st.session_state.pop(_f)
+
     # session_state キー初期化
-    if "dec_item" not in st.session_state:
-        st.session_state["dec_item"] = ""
-    if "dec_qty" not in st.session_state:
-        st.session_state["dec_qty"] = ""
-    if "dec_price" not in st.session_state:
-        st.session_state["dec_price"] = ""
-    if "dec_note" not in st.session_state:
-        st.session_state["dec_note"] = ""
+    for _k in ("dec_item","dec_qty","dec_price","dec_note"):
+        if _k not in st.session_state:
+            st.session_state[_k] = ""
 
     # 仕入れ済み商品から選ぶ
     with st.expander("📋 仕入れ済み商品から選ぶ", expanded=False):
@@ -349,15 +356,15 @@ if reg_sub == "💴 決まった売値の登録":
                 c2.caption(rec["supplier"])
                 c3.caption(rec["product_name"])
                 if c4.button("選択", key=f"sel_{rec['purchase_date']}_{rec['product_name']}"):
-                    st.session_state["dec_item"] = rec["product_name"]
+                    st.session_state["dec_item_pre"] = rec["product_name"]
                     st.rerun()
         else:
             st.caption("まだ仕入れ記録がありません。")
 
-    dec_item  = st.text_input("品物名",    key="dec_item",  placeholder="例：ネーブルオレンジ")
-    dec_qty   = st.text_input("量",        key="dec_qty",   placeholder="例：1個、1kg、1箱")
-    dec_price = st.text_input("金額（円）", key="dec_price", placeholder="例：500円")
-    dec_note  = st.text_input("備考（任意）", key="dec_note", placeholder="例：パンダ広場・いきいき共通")
+    dec_item  = st.text_input("品物名",      key="dec_item",  placeholder="例：ネーブルオレンジ")
+    dec_qty   = st.text_input("量",          key="dec_qty",   placeholder="例：1個、1kg、1箱")
+    dec_price = st.text_input("金額（円）",   key="dec_price", placeholder="例：500円")
+    dec_note  = st.text_input("備考（任意）", key="dec_note",  placeholder="例：パンダ広場・いきいき共通")
 
     dec_edit_page_id = st.session_state.get("dec_edit_page_id")
     if dec_edit_page_id:
@@ -389,10 +396,10 @@ if reg_sub == "💴 決まった売値の登録":
             c1.markdown(f"**{d['item_name']}**{qty}　→　{d['price']}{note}")
             if c2.button("✏️", key=f"edit_d_{d['page_id']}"):
                 st.session_state["dec_edit_page_id"] = d["page_id"]
-                st.session_state["dec_item"]  = d["item_name"]
-                st.session_state["dec_qty"]   = d["quantity"]
-                st.session_state["dec_price"] = d["price"]
-                st.session_state["dec_note"]  = d["note"]
+                st.session_state["dec_item_pre"]  = d["item_name"]
+                st.session_state["dec_qty_pre"]   = d["quantity"]
+                st.session_state["dec_price_pre"] = d["price"]
+                st.session_state["dec_note_pre"]  = d["note"]
                 st.rerun()
     else:
         st.caption("まだ決め事が登録されていません。")
