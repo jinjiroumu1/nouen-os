@@ -649,6 +649,11 @@ def build_network_from_notion() -> dict:
     chat        = _fetch_db_records(CHAT_DB_ID, limit=30)
     notion_pages = fetch_page_tree(DIARY_PAGE_ID, "農業日誌ページ")
 
+    with st.expander("🔧 チャット記録確認", expanded=False):
+        st.write(f"**CHAT_DB_ID:** `{CHAT_DB_ID}`")
+        st.write(f"**取得文字数:** {len(chat)} 文字")
+        st.text(chat[:2000] if chat else "（取得なし）")
+
     all_text = f"""【農業日誌】
 {diary[:1500]}
 
