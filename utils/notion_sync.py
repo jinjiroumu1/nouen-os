@@ -247,6 +247,74 @@ def load_accounting_decisions() -> list[dict]:
         return []
 
 
+def _get_or_create_purchase_db(client) -> str | None:
+    """会計ページに仕入れ記録DBを取得または作成してIDを返す。"""
+    try:
+        results = client.blocks.children.list(block_id=ACCOUNTING_PAGE_ID)
+        for block in results.get("results", []):
+            if block.get("type") == "child_database":
+                if block.get("child_database", {}).get("title", "") == "仕入れ記録":
+                    return block["id"].replace("-", "")
+        db = client.databases.create(
+            parent={"page_id": ACCOUNTING_PAGE_ID},
+            title=[{"text": {"content": "仕入れ記録"}}],
+            properties={
+                "商品名":       {"title": {}},
+                "仕入日":       {"date": {}},
+                "取引先":       {"rich_text": {}},
+                "商品単価":     {"number": {"format": "yen"}},
+                "仕入個数":     {"number": {"format": "number"}},
+                "送料":         {"number": {"format": "yen"}},
+                "消費税区分":   {"select": {}},
+                "商品単価合計": {"number": {"format": "yen"}},
+                "備考":         {"rich_text": {}},
+            },
+        )
+        return db["id"].replace("-", "")
+    except Exception as e:
+        st.warning(f"Notion DB取得/作成エラー（仕入れ記録）: {e}")
+        return None
+
+
+def save_purchase_record(
+    purchase_date: str,
+    supplier: str,
+    product_name: str,
+    unit_price: float,
+    quantity: int,
+    shipping: float,
+    tax_type: str,
+    total_unit_price: float,
+    note: str,
+) -> bool:
+    """仕入れ記録DBに1商品分を保存する。成功時True。"""
+    client = _get_client()
+    if not client:
+        return False
+    db_id = _get_or_create_purchase_db(client)
+    if not db_id:
+        return False
+    try:
+        client.pages.create(
+            parent={"database_id": db_id},
+            properties={
+                "商品名":       _title(product_name),
+                "仕入日":       _date(purchase_date),
+                "取引先":       _rich_text(supplier),
+                "商品単価":     {"number": unit_price},
+                "仕入個数":     {"number": quantity},
+                "送料":         {"number": shipping},
+                "消費税区分":   _select(tax_type),
+                "商品単価合計": {"number": total_unit_price},
+                "備考":         _rich_text(note),
+            },
+        )
+        return True
+    except Exception as e:
+        st.warning(f"Notion同期エラー（仕入れ記録）: {e}")
+        return False
+
+
 def save_pop_log(question: str, answer: str):
     """POPページの子DBに質問・回答を保存する。"""
     client = _get_client()

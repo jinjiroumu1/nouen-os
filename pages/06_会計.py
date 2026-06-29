@@ -1,7 +1,7 @@
 import streamlit as st
 from utils.ai_advisor import get_ai_response_accounting, extract_delivery_note
 from utils.sheets_loader import load_sheets, append_cost_row, upload_delivery_photo, search_delivery_photos
-from utils.notion_sync import save_accounting_log, save_accounting_decision, load_accounting_decisions
+from utils.notion_sync import save_accounting_log, save_accounting_decision, load_accounting_decisions, save_purchase_record
 from pathlib import Path as _P
 
 st.set_page_config(page_title="会計・原価管理", page_icon="💰", layout="wide")
@@ -131,6 +131,104 @@ with tab_ask:
 # タブ② 登録する
 # ══════════════════════════════════════════════════════
 with tab_reg:
+
+    # ── 仕入れ登録 ───────────────────────────────────
+    st.subheader("🛒 仕入れを登録する")
+    st.caption("仕入れた商品を記録します。送料・消費税を自動計算してNotionに保存します。")
+
+    if "purchase_items" not in st.session_state:
+        st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
+
+    col_d, col_s, col_t = st.columns(3)
+    with col_d:
+        p_date = st.date_input("仕入日", key="p_date")
+    with col_s:
+        p_supplier = st.text_input("取引先", placeholder="例：二見酒店", key="p_supplier")
+    with col_t:
+        p_tax = st.radio("消費税区分", ["税込", "税別"], horizontal=True, key="p_tax")
+
+    p_shipping = st.number_input("送料（円・任意）", min_value=0.0, step=10.0, key="p_shipping")
+
+    st.markdown("**商品リスト**")
+    items = st.session_state.purchase_items
+    for i, item in enumerate(items):
+        c1, c2, c3, c4 = st.columns([4, 2, 2, 1])
+        with c1:
+            items[i]["name"] = st.text_input("商品名", value=item["name"], key=f"p_name_{i}", placeholder="例：A生樽20L")
+        with c2:
+            items[i]["unit_price"] = st.number_input("商品単価（円）", value=float(item["unit_price"]), step=1.0, key=f"p_price_{i}")
+        with c3:
+            items[i]["quantity"] = st.number_input("仕入個数", value=int(item["quantity"]), min_value=1, step=1, key=f"p_qty_{i}")
+        with c4:
+            if st.button("🗑️", key=f"p_del_{i}") and len(items) > 1:
+                st.session_state.purchase_items.pop(i)
+                st.rerun()
+
+    if st.button("➕ 商品を追加", key="p_add"):
+        st.session_state.purchase_items.append({"name": "", "unit_price": 0.0, "quantity": 1})
+        st.rerun()
+
+    p_note = st.text_input("備考（任意）", key="p_note")
+
+    # 計算プレビュー
+    total_qty = sum(it["quantity"] for it in items)
+    st.markdown("---")
+    st.markdown("**📊 計算プレビュー**")
+    preview_rows = []
+    for it in items:
+        base = it["unit_price"]
+        qty  = it["quantity"]
+        # 消費税
+        if p_tax == "税別":
+            taxed_price = base * 1.08
+            ship_tax    = (p_shipping / total_qty) * 1.10 if total_qty > 0 else 0
+        else:
+            taxed_price = base
+            ship_tax    = p_shipping / total_qty if total_qty > 0 else 0
+        total_unit = taxed_price + ship_tax
+        preview_rows.append({
+            "商品名": it["name"] or "（未入力）",
+            "単価": f"¥{base:.0f}",
+            "個数": qty,
+            "按分送料": f"¥{ship_tax:.1f}",
+            "商品単価合計": f"¥{total_unit:.1f}",
+        })
+    import pandas as _pd
+    st.dataframe(_pd.DataFrame(preview_rows), use_container_width=True, hide_index=True)
+
+    if st.button("💾 仕入れを保存する", key="p_save"):
+        errors = []
+        for it in items:
+            base = it["unit_price"]
+            qty  = it["quantity"]
+            if p_tax == "税別":
+                taxed_price = base * 1.08
+                ship_tax    = (p_shipping / total_qty) * 1.10 if total_qty > 0 else 0
+            else:
+                taxed_price = base
+                ship_tax    = p_shipping / total_qty if total_qty > 0 else 0
+            total_unit = taxed_price + ship_tax
+            ok = save_purchase_record(
+                purchase_date    = str(p_date),
+                supplier         = p_supplier,
+                product_name     = it["name"],
+                unit_price       = base,
+                quantity         = qty,
+                shipping         = p_shipping / len(items) if items else 0,
+                tax_type         = p_tax,
+                total_unit_price = round(total_unit, 1),
+                note             = p_note,
+            )
+            if not ok:
+                errors.append(it["name"] or "（未入力）")
+        if errors:
+            st.error(f"保存失敗: {', '.join(errors)}")
+        else:
+            st.success(f"✅ {len(items)} 件の仕入れを保存しました！")
+            st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
+            st.rerun()
+
+    st.markdown("---")
 
     # ── 決め事（金額）登録 ────────────────────────────
     st.subheader("📌 金額を決める")
