@@ -163,28 +163,45 @@ def save_accounting_log(question: str, answer: str):
         st.warning(f"Notion同期エラー（会計）: {e}")
 
 
+_DECISIONS_PROPS = {
+    "品物名":   {"title": {}},
+    "カテゴリ": {"select": {}},
+    "量":       {"rich_text": {}},
+    "金額":     {"rich_text": {}},
+    "備考":     {"rich_text": {}},
+    "日時":     {"date": {}},
+}
+
+
 def _get_or_create_decisions_db(client) -> str | None:
-    """会計決め事ページに決め事DBを取得または作成してIDを返す。"""
+    """会計決め事ページに決め事DBを取得または作成し、プロパティ不足分を追加してIDを返す。"""
     try:
         results = client.blocks.children.list(block_id=ACCOUNTING_DECISIONS_PAGE_ID)
+        db_id = None
         for block in results.get("results", []):
             if block.get("type") == "child_database":
                 title = block.get("child_database", {}).get("title", "")
                 if title == "会計決め事":
-                    return block["id"].replace("-", "")
-        db = client.databases.create(
-            parent={"page_id": ACCOUNTING_DECISIONS_PAGE_ID},
-            title=[{"text": {"content": "会計決め事"}}],
-            properties={
-                "品物名":   {"title": {}},
-                "カテゴリ": {"select": {}},
-                "量":       {"rich_text": {}},
-                "金額":     {"rich_text": {}},
-                "備考":     {"rich_text": {}},
-                "日時":     {"date": {}},
-            },
-        )
-        return db["id"].replace("-", "")
+                    db_id = block["id"].replace("-", "")
+                    break
+
+        if db_id is None:
+            # DBが存在しないので正しいプロパティで新規作成
+            db = client.databases.create(
+                parent={"page_id": ACCOUNTING_DECISIONS_PAGE_ID},
+                title=[{"text": {"content": "会計決め事"}}],
+                properties=_DECISIONS_PROPS,
+            )
+            return db["id"].replace("-", "")
+
+        # 既存DBのプロパティを確認し、不足分だけ追加
+        db_info = client.databases.retrieve(database_id=db_id)
+        existing_props = set(db_info.get("properties", {}).keys())
+        missing = {k: v for k, v in _DECISIONS_PROPS.items() if k not in existing_props}
+        if missing:
+            client.databases.update(database_id=db_id, properties=missing)
+
+        return db_id
     except Exception as e:
         st.warning(f"Notion DB取得/作成エラー（決め事）: {e}")
         return None
