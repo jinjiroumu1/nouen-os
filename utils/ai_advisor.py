@@ -659,7 +659,7 @@ def build_network_from_notion() -> dict:
 {recipe[:1500]}
 
 【チャット・対話記録】
-{chat[:1000]}
+{chat[:2000]}
 
 【Notionページ記録】
 {notion_pages[:1000]}
