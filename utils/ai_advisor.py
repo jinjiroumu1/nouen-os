@@ -195,7 +195,7 @@ def _base_system(kenjin, past, role_desc):
 """
 
 
-def _call_claude(system, first_message, chat_history, use_books=True, extra_pdfs=None):
+def _call_claude(system, first_message, chat_history, use_books=True, extra_pdfs=None, book_keywords=None):
     client = _claude()
     if not client:
         return (
@@ -206,8 +206,12 @@ def _call_claude(system, first_message, chat_history, use_books=True, extra_pdfs
     # PDF/Wordブロックを取得（use_books=False の場合はスキップ）
     pdf_blocks = []
     if use_books:
-        from utils.book_loader import load_books
-        books = load_books()
+        if book_keywords:
+            from utils.book_loader import load_relevant_books
+            books = load_relevant_books(book_keywords)
+        else:
+            from utils.book_loader import load_books
+            books = load_books()
         word_texts = []
         for b in books:
             if b.get("type") == "word":
@@ -277,7 +281,10 @@ def get_ai_response(diary_entry: dict, chat_history: list) -> str:
         f"疑問：{diary_entry.get('question','')}",
         f"仮説：{diary_entry.get('hypothesis','')}",
     ])
-    return _call_claude(system, f"今日の農業日誌です。\n\n{first}", chat_history)
+    keywords = [k for k in [
+        diary_entry.get("crop"), diary_entry.get("observation"), diary_entry.get("question")
+    ] if k]
+    return _call_claude(system, f"今日の農業日誌です。\n\n{first}", chat_history, book_keywords=keywords)
 
 
 # ── 栽培計画 ──────────────────────────────────────────────
@@ -298,7 +305,8 @@ def get_ai_response_cultivation(entry: dict, chat_history: list) -> str:
         f"コンパニオンプランツ：{entry.get('companion_plants','')}",
         f"必要資材：{entry.get('required_materials','')}",
     ])
-    return _call_claude(system, f"栽培計画を立てました。\n\n{first}", chat_history)
+    keywords = [k for k in [entry.get("crop"), entry.get("companion_plants")] if k]
+    return _call_claude(system, f"栽培計画を立てました。\n\n{first}", chat_history, book_keywords=keywords)
 
 
 # ── 料理 ─────────────────────────────────────────────────
@@ -317,7 +325,8 @@ def get_ai_response_recipe(entry: dict, chat_history: list) -> str:
         f"季節：{entry.get('season','')}",
         f"メモ：{entry.get('notes','')}",
     ])
-    return _call_claude(system, f"料理を記録しました。\n\n{first}", chat_history)
+    keywords = [k for k in [entry.get("vegetable"), entry.get("recipe_name")] if k]
+    return _call_claude(system, f"料理を記録しました。\n\n{first}", chat_history, book_keywords=keywords)
 
 
 # ── チャット ─────────────────────────────────────────────
@@ -334,7 +343,11 @@ def get_ai_response_chat(entry: dict, chat_history: list) -> str:
         f"疑問：{entry.get('question','')}",
         f"関連トピック：{entry.get('related_topics','')}",
     ])
-    return _call_claude(system, f"質問があります。\n\n{first}", chat_history)
+    # 質問文を単語分割してキーワード抽出（3文字以上）
+    import re as _re
+    question_text = entry.get("question", "") + " " + entry.get("related_topics", "")
+    keywords = [w for w in _re.split(r'[\s、。・,]+', question_text) if len(w) >= 3][:5]
+    return _call_claude(system, f"質問があります。\n\n{first}", chat_history, book_keywords=keywords)
 
 
 # ── 会計・原価管理 ─────────────────────────────────────────
@@ -427,7 +440,9 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
 - データがない場合は「データが見つかりません」と正直に伝える
 - 改善提案は具体的・実践的に
 """
-    return _call_claude(system, question, chat_history, use_books=False)
+    import re as _re
+    keywords = [w for w in _re.split(r'[\s、。・,]+', question) if len(w) >= 2][:5]
+    return _call_claude(system, question, chat_history, use_books=True, book_keywords=keywords)
 
 
 def extract_delivery_note(image_bytes: bytes, media_type: str) -> dict:

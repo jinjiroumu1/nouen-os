@@ -49,6 +49,68 @@ def _docx_to_text(data: bytes) -> str:
 
 
 @st.cache_data(ttl=1800)
+def _list_book_files() -> list[dict]:
+    """フォルダ内のファイル名一覧のみ取得（ダウンロードなし）。"""
+    folder_id = st.secrets.get("BOOK_FOLDER_ID", "")
+    if not folder_id:
+        return []
+    service = _drive_service()
+    if not service:
+        return []
+    try:
+        query = (
+            f"'{folder_id}' in parents"
+            f" and (mimeType='application/pdf' or mimeType='{DOCX_MIME}')"
+            " and trashed=false"
+        )
+        result = service.files().list(
+            q=query,
+            fields="files(id, name, mimeType)",
+            pageSize=50,
+        ).execute()
+        return result.get("files", [])
+    except Exception:
+        return []
+
+
+def load_relevant_books(keywords: list[str], max_files: int = 2) -> list[dict]:
+    """
+    キーワードに関連するファイル名のみ絞り込んでダウンロードして返す。
+    keywords: 検索キーワードのリスト（部分一致）
+    max_files: 最大取得ファイル数（デフォルト2）
+    返り値: load_books() と同じ形式のリスト
+    """
+    if not keywords:
+        return []
+    files = _list_book_files()
+    kw_lower = [k.lower() for k in keywords if k]
+    matched = [
+        f for f in files
+        if any(kw in f["name"].lower() for kw in kw_lower)
+    ]
+    if not matched:
+        return []
+
+    service = _drive_service()
+    if not service:
+        return []
+
+    books = []
+    for f in matched[:max_files]:
+        data = _download_bytes(service, f["id"])
+        if not data:
+            continue
+        if f["mimeType"] == DOCX_MIME:
+            text = _docx_to_text(data)
+            if text:
+                books.append({"name": f["name"], "type": "word", "text": text})
+        else:
+            b64 = base64.standard_b64encode(data).decode("utf-8")
+            books.append({"name": f["name"], "type": "pdf", "data": b64})
+    return books
+
+
+@st.cache_data(ttl=1800)
 def load_books() -> list[dict]:
     """
     Google DriveフォルダのPDF・Wordを全件取得して返す。
