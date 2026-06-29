@@ -248,9 +248,10 @@ if reg_sub == "🛒 仕入れを登録する":
 
     if st.button("💾 仕入れを保存する", key="p_save"):
         errors = []
+        n_items = len(items)
         for it in items:
             taxed_price, ship_per_unit, total_unit = _calc(it)
-            ok = save_purchase_record(
+            ok, err_msg = save_purchase_record(
                 purchase_date    = str(p_date),
                 supplier         = p_supplier,
                 product_name     = it["name"],
@@ -262,13 +263,16 @@ if reg_sub == "🛒 仕入れを登録する":
                 note             = p_note,
             )
             if not ok:
-                errors.append(it["name"] or "（未入力）")
+                errors.append(f"{it['name'] or '（未入力）'}: {err_msg}")
         if errors:
-            st.error(f"保存失敗: {', '.join(errors)}")
+            st.error("保存失敗:\n" + "\n".join(errors))
         else:
-            st.success(f"✅ {len(items)} 件の仕入れを保存しました！")
-            st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
-            for k in ("p_date", "p_supplier", "p_tax", "p_shipping", "p_note"):
+            st.success(f"✅ {n_items} 件の仕入れを保存しました！")
+            # ウィジェットキーを含めて完全リセット
+            keys_to_delete = ["purchase_items", "p_date", "p_supplier", "p_tax", "p_shipping", "p_note"]
+            for idx in range(n_items):
+                keys_to_delete += [f"p_name_{idx}", f"p_price_{idx}", f"p_qty_{idx}"]
+            for k in keys_to_delete:
                 st.session_state.pop(k, None)
             st.rerun()
 

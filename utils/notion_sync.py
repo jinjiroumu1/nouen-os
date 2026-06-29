@@ -290,10 +290,8 @@ def save_purchase_record(
     """仕入れ記録DBに1商品分を保存する。成功時True。"""
     client = _get_client()
     if not client:
-        return False
-    db_id = _get_or_create_purchase_db(client)
-    if not db_id:
-        return False
+        return False, "Notionクライアント初期化失敗"
+    db_id = "38ea73ede49381aaa109e3909bdead98"
     try:
         client.pages.create(
             parent={"database_id": db_id},
@@ -309,10 +307,9 @@ def save_purchase_record(
                 "備考":         _rich_text(note),
             },
         )
-        return True
+        return True, ""
     except Exception as e:
-        st.warning(f"Notion同期エラー（仕入れ記録）: {e}")
-        return False
+        return False, str(e)
 
 
 def load_purchase_records(limit: int = 20) -> list[dict]:
