@@ -162,9 +162,9 @@ def _load_diary_from_notion():
                 "title":       txt("タイトル"),
                 "crop":        txt("作物"),
                 "work_done":   txt("作業内容"),
-                "observation": txt("観察"),
+                "observation": txt("観察・気づき"),
                 "hypothesis":  txt("仮説"),
-                "question":    txt("疑問"),
+                "question":    txt("疑問・問い"),
                 "source_type": txt("知識の種別") or "souhatsuchi",
             })
         return rows
@@ -191,9 +191,9 @@ else:
         if row.get("work_done"):
             body_parts.append(f"【作業】{row['work_done']}")
         if row.get("observation"):
-            body_parts.append(f"【観察】{row['observation']}")
+            body_parts.append(f"【観察・気づき】{row['observation']}")
         if row.get("question"):
-            body_parts.append(f"【疑問】{row['question']}")
+            body_parts.append(f"【疑問・問い】{row['question']}")
         if row.get("hypothesis"):
             body_parts.append(f"【仮説】{row['hypothesis']}")
         if search and search not in str(row.values()):
