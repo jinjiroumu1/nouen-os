@@ -174,38 +174,7 @@ _DECISIONS_PROPS_EXTRA = {
 }
 
 
-def _get_or_create_decisions_db(client) -> str | None:
-    """会計決め事ページに決め事DBを取得または作成し、プロパティ不足分を追加してIDを返す。"""
-    try:
-        results = client.blocks.children.list(block_id=ACCOUNTING_DECISIONS_PAGE_ID)
-        db_id = None
-        for block in results.get("results", []):
-            if block.get("type") == "child_database":
-                title = block.get("child_database", {}).get("title", "")
-                if title == "会計決め事":
-                    db_id = block["id"].replace("-", "")
-                    break
-
-        if db_id is None:
-            # DBが存在しないので新規作成（titleは自動生成される「名前」を使う）
-            db = client.databases.create(
-                parent={"page_id": ACCOUNTING_DECISIONS_PAGE_ID},
-                title=[{"text": {"content": "会計決め事"}}],
-                properties=_DECISIONS_PROPS_EXTRA,
-            )
-            return db["id"].replace("-", "")
-
-        # 既存DBのプロパティを確認し、不足分だけ追加（titleは除外）
-        db_info = client.databases.retrieve(database_id=db_id)
-        existing_props = set(db_info.get("properties", {}).keys())
-        missing = {k: v for k, v in _DECISIONS_PROPS_EXTRA.items() if k not in existing_props}
-        if missing:
-            client.databases.update(database_id=db_id, properties=missing)
-
-        return db_id
-    except Exception as e:
-        st.warning(f"Notion DB取得/作成エラー（決め事）: {e}")
-        return None
+DECISIONS_DB_ID = "38ea73ede4938132956fcdbed01c0f5f"
 
 
 def save_accounting_decision(item_name: str, category: str, quantity: str, price: str, note: str) -> bool:
@@ -213,15 +182,12 @@ def save_accounting_decision(item_name: str, category: str, quantity: str, price
     client = _get_client()
     if not client:
         return False
-    db_id = _get_or_create_decisions_db(client)
-    if not db_id:
-        return False
     try:
         now = datetime.now(timezone.utc).isoformat()
         client.pages.create(
-            parent={"database_id": db_id},
+            parent={"database_id": DECISIONS_DB_ID},
             properties={
-                "名前":     _title(item_name),
+                "品物名":   _title(item_name),
                 "カテゴリ": _select(category),
                 "量":       _rich_text(quantity),
                 "金額":     _rich_text(price),
@@ -240,15 +206,12 @@ def load_accounting_decisions() -> list[dict]:
     client = _get_client()
     if not client:
         return []
-    db_id = _get_or_create_decisions_db(client)
-    if not db_id:
-        return []
     try:
         items = []
         cursor = None
         while True:
             params = {
-                "database_id": db_id,
+                "database_id": DECISIONS_DB_ID,
                 "page_size": 100,
                 "sorts": [{"timestamp": "created_time", "direction": "descending"}],
             }
@@ -257,7 +220,7 @@ def load_accounting_decisions() -> list[dict]:
             res = client.databases.query(**params)
             for page in res.get("results", []):
                 props = page.get("properties", {})
-                name_val  = props.get("名前", {}).get("title", [])
+                name_val  = props.get("品物名", {}).get("title", [])
                 cat_val   = props.get("カテゴリ", {})
                 qty_val   = props.get("量", {}).get("rich_text", [])
                 price_val = props.get("金額", {}).get("rich_text", [])
