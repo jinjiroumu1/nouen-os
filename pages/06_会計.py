@@ -1,7 +1,7 @@
 import streamlit as st
 from utils.ai_advisor import get_ai_response_accounting, extract_delivery_note
 from utils.sheets_loader import load_sheets, append_cost_row, upload_delivery_photo, search_delivery_photos
-from utils.notion_sync import save_accounting_log
+from utils.notion_sync import save_accounting_log, save_accounting_decision, load_accounting_decisions
 from pathlib import Path as _P
 
 st.set_page_config(page_title="会計・原価管理", page_icon="💰", layout="wide")
@@ -51,6 +51,34 @@ if st.session_state.accounting_chat:
     if st.button("チャットをリセット"):
         st.session_state.accounting_chat = []
         st.rerun()
+
+st.markdown("---")
+
+# ── 決め事管理 ────────────────────────────────────────────
+st.subheader("📌 決め事を登録する")
+st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
+
+with st.form("decision_form", clear_on_submit=True):
+    dec_title   = st.text_input("タイトル", placeholder="例：ネーブルオレンジの売値")
+    dec_content = st.text_input("内容",     placeholder="例：500円")
+    submitted   = st.form_submit_button("💾 保存する")
+    if submitted:
+        if dec_title and dec_content:
+            ok = save_accounting_decision(dec_title, dec_content)
+            if ok:
+                st.success("✅ 決め事を保存しました！")
+            else:
+                st.error("保存に失敗しました。Notion設定を確認してください。")
+        else:
+            st.warning("タイトルと内容を両方入力してください。")
+
+decisions = load_accounting_decisions()
+if decisions:
+    st.markdown("**📋 登録済みの決め事**")
+    for d in decisions:
+        st.markdown(f"- **{d['title']}**：{d['content']}")
+else:
+    st.caption("まだ決め事が登録されていません。")
 
 st.markdown("---")
 

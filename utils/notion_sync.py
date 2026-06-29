@@ -9,9 +9,10 @@ DB_IDS = {
     "chat_logs":         "fdd51460926141c2b2ce0b36adf474c2",
 }
 
-ACCOUNTING_PAGE_ID = "388a73ede493800ea5fdd751647cba5d"
-POP_PAGE_ID        = "38ba73ede49380a5beb6e30548302f30"
-HYGIENE_PAGE_ID    = "38ba73ede49380bbb4befb5d70db6726"
+ACCOUNTING_PAGE_ID           = "388a73ede493800ea5fdd751647cba5d"
+ACCOUNTING_DECISIONS_PAGE_ID = "644a9f42d1d74165bc1a1b75ab954766"
+POP_PAGE_ID                  = "38ba73ede49380a5beb6e30548302f30"
+HYGIENE_PAGE_ID              = "38ba73ede49380bbb4befb5d70db6726"
 
 SOURCE_TYPE_LABEL = {
     "souhatsuchi": "🌸創発知",
@@ -160,6 +161,91 @@ def save_accounting_log(question: str, answer: str):
         )
     except Exception as e:
         st.warning(f"Notion同期エラー（会計）: {e}")
+
+
+def _get_or_create_decisions_db(client) -> str | None:
+    """会計決め事ページに決め事DBを取得または作成してIDを返す。"""
+    try:
+        results = client.blocks.children.list(block_id=ACCOUNTING_DECISIONS_PAGE_ID)
+        for block in results.get("results", []):
+            if block.get("type") == "child_database":
+                title = block.get("child_database", {}).get("title", "")
+                if title == "会計決め事":
+                    return block["id"].replace("-", "")
+        db = client.databases.create(
+            parent={"page_id": ACCOUNTING_DECISIONS_PAGE_ID},
+            title=[{"text": {"content": "会計決め事"}}],
+            properties={
+                "タイトル": {"title": {}},
+                "内容":     {"rich_text": {}},
+                "日時":     {"date": {}},
+            },
+        )
+        return db["id"].replace("-", "")
+    except Exception as e:
+        st.warning(f"Notion DB取得/作成エラー（決め事）: {e}")
+        return None
+
+
+def save_accounting_decision(title: str, content: str) -> bool:
+    """会計決め事をDBに保存する。成功時True。"""
+    client = _get_client()
+    if not client:
+        return False
+    db_id = _get_or_create_decisions_db(client)
+    if not db_id:
+        return False
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        client.pages.create(
+            parent={"database_id": db_id},
+            properties={
+                "タイトル": _title(title),
+                "内容":     _rich_text(content),
+                "日時":     _date(now),
+            },
+        )
+        return True
+    except Exception as e:
+        st.warning(f"Notion同期エラー（会計決め事）: {e}")
+        return False
+
+
+def load_accounting_decisions() -> list[dict]:
+    """会計決め事を全件取得して返す。"""
+    client = _get_client()
+    if not client:
+        return []
+    db_id = _get_or_create_decisions_db(client)
+    if not db_id:
+        return []
+    try:
+        items = []
+        cursor = None
+        while True:
+            params = {
+                "database_id": db_id,
+                "page_size": 100,
+                "sorts": [{"timestamp": "created_time", "direction": "descending"}],
+            }
+            if cursor:
+                params["start_cursor"] = cursor
+            res = client.databases.query(**params)
+            for page in res.get("results", []):
+                props = page.get("properties", {})
+                t_val = props.get("タイトル", {}).get("title", [])
+                c_val = props.get("内容", {}).get("rich_text", [])
+                title_text   = "".join(r.get("plain_text", "") for r in t_val)
+                content_text = "".join(r.get("plain_text", "") for r in c_val)
+                if title_text or content_text:
+                    items.append({"title": title_text, "content": content_text})
+            if not res.get("has_more"):
+                break
+            cursor = res.get("next_cursor")
+        return items
+    except Exception as e:
+        st.warning(f"Notion取得エラー（会計決め事）: {e}")
+        return []
 
 
 def save_pop_log(question: str, answer: str):
