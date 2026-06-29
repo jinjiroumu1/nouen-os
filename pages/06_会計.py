@@ -295,7 +295,7 @@ if reg_sub == "💴 決まった売値の登録":
     st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
 
     with st.form("decision_form", clear_on_submit=True):
-        dec_category = st.radio("カテゴリ", ["🏷️ 売値", "📋 ルール"], horizontal=True)
+        dec_category = "🏷️ 売値"
         dec_item     = st.text_input("品物名",        placeholder="例：ネーブルオレンジ")
         dec_qty      = st.text_input("量",             placeholder="例：1個、1kg、1箱")
         dec_price    = st.text_input("金額（円）",     placeholder="例：500円")
