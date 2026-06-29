@@ -214,8 +214,14 @@ def _call_claude(system, first_message, chat_history, use_books=True, extra_pdfs
     if sheets_text:
         system = system + f"\n\n【販売・原価データ（スプレッドシート）】\n{sheets_text[:3000]}"
 
-    first_content = first_message
-    messages = [{"role": "user", "content": first_content}] + chat_history
+    # chat_history: 過去のやり取り [user,assistant,user,assistant,...]
+    # first_message: 今回のユーザー質問（chat_historyには含まれていない）
+    prior = [
+        {"role": m["role"], "content": m["content"]}
+        for m in chat_history
+        if m.get("role") in ("user", "assistant") and m.get("content")
+    ]
+    messages = prior + [{"role": "user", "content": first_message}]
 
     try:
         response = client.messages.create(
