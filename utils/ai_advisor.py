@@ -358,34 +358,58 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
 
     # 3. Notion会計チャットログ（50件取得・価格関連を優先）
     notion_log = ""
+    notion_debug_info = {"status": "未実行", "db_id": None, "count": 0, "error": None, "lines": []}
     try:
         from utils.notion_sync import _get_client, _get_or_create_db, ACCOUNTING_PAGE_ID
         client = _get_client()
-        if client:
+        if not client:
+            notion_debug_info["status"] = "Notionクライアント取得失敗（NOTION_TOKEN未設定?）"
+        else:
             db_id = _get_or_create_db(client, ACCOUNTING_PAGE_ID, "会計チャットログ")
-            if db_id:
+            notion_debug_info["db_id"] = db_id
+            if not db_id:
+                notion_debug_info["status"] = f"DBが見つかりません（ACCOUNTING_PAGE_ID={ACCOUNTING_PAGE_ID}）"
+            else:
                 res = client.databases.query(**{"database_id": db_id, "page_size": 50})
+                results = res.get("results", [])
+                notion_debug_info["count"] = len(results)
+                notion_debug_info["status"] = f"取得成功: {len(results)}件"
                 price_keywords = {"売値", "販売価格", "決定", "価格", "値段", "円", "単価", "売価"}
                 priority_lines = []
                 other_lines    = []
-                for page in res.get("results", []):
+                for page in results:
                     props = page.get("properties", {})
                     q_val = props.get("質問", {}).get("title", [])
                     a_val = props.get("回答", {}).get("rich_text", [])
-                    q_text = q_val[0]["text"]["content"] if q_val else ""
-                    a_text = a_val[0]["text"]["content"] if a_val else ""
+                    q_text = "".join(r.get("plain_text", "") for r in q_val)
+                    a_text = "".join(r.get("plain_text", "") for r in a_val)
                     if not q_text:
                         continue
                     entry = f"Q: {q_text}\nA: {a_text[:400]}"
+                    notion_debug_info["lines"].append(f"Q: {q_text[:50]} / A: {a_text[:50]}")
                     if any(kw in q_text or kw in a_text for kw in price_keywords):
                         priority_lines.append(entry)
                     else:
                         other_lines.append(entry)
-                # 価格関連を先頭に、残りを後ろに結合
                 all_lines = priority_lines + other_lines
                 notion_log = "\n\n".join(all_lines)
-    except Exception:
-        pass
+    except Exception as e:
+        notion_debug_info["status"] = "例外発生"
+        notion_debug_info["error"] = str(e)
+
+    # デバッグ用expander
+    with st.expander("🔍 [デバッグ] Notion会計チャットログ取得状況"):
+        st.write(f"**ステータス:** {notion_debug_info['status']}")
+        st.write(f"**DB ID:** {notion_debug_info['db_id']}")
+        st.write(f"**取得件数:** {notion_debug_info['count']} 件")
+        if notion_debug_info["error"]:
+            st.error(f"エラー: {notion_debug_info['error']}")
+        if notion_debug_info["lines"]:
+            st.markdown("**取得したログ（先頭50文字）:**")
+            for line in notion_debug_info["lines"]:
+                st.text(line)
+        else:
+            st.info("ログが取得できませんでした")
 
     system = f"""あなたは「AI勘ちゃん」——われまち農縁団の会計・原価管理アドバイザーです。
 
