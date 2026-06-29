@@ -68,10 +68,19 @@ with tab_ask:
         st.session_state.accounting_chat.append({"role": "assistant", "content": reply})
         save_accounting_log(user_input, reply)
 
+    # 直前の質問と回答を入力欄の下に表示
     if st.session_state.accounting_chat:
+        last_q = st.session_state.accounting_chat[-2]["content"]
+        last_a = st.session_state.accounting_chat[-1]["content"]
+        st.info(f"**👨‍💼 質問：** {last_q}")
+        st.success(f"**🌱 勘ちゃん：** {last_a}")
+
+    # 直前を除く過去の質問を折りたたみで表示
+    past = st.session_state.accounting_chat[:-2]
+    if past:
         st.markdown("---")
-        with st.expander("📋 やり取りの履歴", expanded=False):
-            for msg in st.session_state.accounting_chat:
+        with st.expander("📋 過去の質問", expanded=False):
+            for msg in past:
                 if msg["role"] == "user":
                     st.info(f"**👨‍💼 質問：** {msg['content']}")
                 else:
