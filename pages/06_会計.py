@@ -20,11 +20,6 @@ st.caption("原価・売上・支払いについて何でも聞いてくださ�
 if "accounting_chat" not in st.session_state:
     st.session_state.accounting_chat = []
 
-for msg in st.session_state.accounting_chat:
-    avatar = "👨‍🌾" if msg["role"] == "user" else "🌱"
-    with st.chat_message(msg["role"], avatar=avatar):
-        st.markdown(msg["content"])
-
 col_input, col_send = st.columns([5, 1])
 with col_input:
     user_input = st.text_input(
@@ -37,20 +32,26 @@ with col_send:
     send = st.button("送信", use_container_width=True)
 
 if send and user_input:
-    st.session_state.accounting_chat.append({"role": "user", "content": user_input})
-    with st.chat_message("user", avatar="👨‍🌾"):
-        st.markdown(user_input)
     with st.spinner("勘ちゃんが数字を確認しています…"):
-        reply = get_ai_response_accounting(user_input, st.session_state.accounting_chat[:-1])
+        reply = get_ai_response_accounting(user_input, st.session_state.accounting_chat)
+    st.session_state.accounting_chat.append({"role": "user", "content": user_input})
     st.session_state.accounting_chat.append({"role": "assistant", "content": reply})
-    with st.chat_message("assistant", avatar="🌱"):
-        st.markdown(reply)
     save_accounting_log(user_input, reply)
     st.rerun()
 
-if st.session_state.accounting_chat and st.button("チャットをリセット"):
-    st.session_state.accounting_chat = []
-    st.rerun()
+# 履歴表示（新しい順ではなく古い順＝追加順）
+if st.session_state.accounting_chat:
+    st.markdown("---")
+    for msg in st.session_state.accounting_chat:
+        if msg["role"] == "user":
+            st.markdown(f"**👨‍💼 質問：** {msg['content']}")
+        else:
+            st.markdown(f"**🌱 勘ちゃん：** {msg['content']}")
+        st.markdown("")
+
+    if st.button("チャットをリセット"):
+        st.session_state.accounting_chat = []
+        st.rerun()
 
 st.markdown("---")
 
