@@ -268,6 +268,8 @@ if reg_sub == "🛒 仕入れを登録する":
         else:
             st.success(f"✅ {len(items)} 件の仕入れを保存しました！")
             st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
+            for k in ("p_date", "p_supplier", "p_tax", "p_shipping", "p_note"):
+                st.session_state.pop(k, None)
             st.rerun()
 
 if reg_sub == "💴 決まった売値の登録":
