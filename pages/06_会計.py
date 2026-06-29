@@ -70,16 +70,12 @@ with tab_ask:
 
     if st.session_state.accounting_chat:
         st.markdown("---")
-        st.markdown("**📋 やり取りの履歴**")
-        for msg in st.session_state.accounting_chat:
-            if msg["role"] == "user":
-                st.info(f"**👨‍💼 質問：** {msg['content']}")
-            else:
-                st.success(f"**🌱 勘ちゃん：** {msg['content']}")
-
-        if st.button("チャットをリセット"):
-            st.session_state.accounting_chat = []
-            st.rerun()
+        with st.expander("📋 やり取りの履歴", expanded=False):
+            for msg in st.session_state.accounting_chat:
+                if msg["role"] == "user":
+                    st.info(f"**👨‍💼 質問：** {msg['content']}")
+                else:
+                    st.success(f"**🌱 勘ちゃん：** {msg['content']}")
 
     st.markdown("---")
 
