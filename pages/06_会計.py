@@ -136,6 +136,31 @@ with tab_reg:
     st.subheader("🛒 仕入れを登録する")
     st.caption("仕入れた商品を記録します。送料・消費税を自動計算してNotionに保存します。")
 
+    with st.expander("📷 納品書写真から原価計算", expanded=False):
+        st.warning("※手書きの納品書は認識精度が低いため、使用しないでください。印字された納品書のみ対応しています。")
+        st.caption("納品書をアップロードすると複数商品をまとめて読み取ります。")
+        dn_uploaded = st.file_uploader("納品書画像（JPG / PNG）", type=["jpg", "jpeg", "png"], key="dn_upload_top")
+        if dn_uploaded:
+            st.image(dn_uploaded, width=300)
+            if st.button("🔍 AIで情報を抽出する", key="dn_extract_top"):
+                with st.spinner("勘ちゃんが読み取っています…"):
+                    mime = "image/jpeg" if dn_uploaded.type in ("image/jpeg", "image/jpg") else "image/png"
+                    img_bytes = dn_uploaded.read()
+                    result = extract_delivery_note(img_bytes, mime)
+                if "error" in result:
+                    st.error(f"抽出エラー: {result['error']}")
+                else:
+                    items_dn = result.get("items") or []
+                    if not items_dn:
+                        items_dn = [{"product_name": "", "purchase_price": 0, "total_quantity": 0, "unit_quantity": 0, "unit": "g"}]
+                    st.session_state["dn_date"]      = str(result.get("date") or "")
+                    st.session_state["dn_farmer"]    = str(result.get("farmer_name") or "")
+                    st.session_state["dn_shipping"]  = float(result.get("shipping_fee") or 0)
+                    st.session_state["dn_items"]     = items_dn
+                    st.session_state["dn_image"]     = img_bytes
+                    st.session_state["dn_orig_name"] = dn_uploaded.name
+                    st.success(f"抽出完了！{len(items_dn)} 商品を読み取りました。下の「📷 納品書写真から原価計算」セクションで確認・保存してください。")
+
     if "purchase_items" not in st.session_state:
         st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
 
