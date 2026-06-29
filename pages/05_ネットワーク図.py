@@ -1,3 +1,4 @@
+import logging
 import streamlit as st
 import streamlit.components.v1 as components
 from utils.ai_advisor import (
@@ -5,8 +6,6 @@ from utils.ai_advisor import (
     get_node_explanation,
     get_ai_response_network,
     SOURCE_TYPE_LABEL,
-    _fetch_db_records,
-    RECIPE_DB_ID,
 )
 
 st.set_page_config(page_title="ネットワーク図", page_icon="🕸️", layout="wide")
@@ -34,16 +33,10 @@ st.markdown("---")
 with st.spinner("Notionの記録を読み込んで、知恵の地図を生成しています…"):
     network = build_network_from_notion()
 
-# ── デバッグ ──────────────────────────────────────────────
-with st.expander("🔧 デバッグ（確認用）"):
-    recipe_raw = _fetch_db_records(RECIPE_DB_ID, limit=5)
-    st.text(recipe_raw)
-    st.markdown("---")
-    st.text(f"nodes: {len(network.get('nodes', []))}　edges: {len(network.get('edges', []))}")
-    if "_debug" in network:
-        st.text(network["_debug"])
-
 nodes = network.get("nodes", [])
+logging.warning(f"[ネットワーク図] nodes={len(nodes)} edges={len(network.get('edges', []))}")
+if "_debug" in network:
+    logging.warning(f"[ネットワーク図] debug: {network['_debug']}")
 edges = network.get("edges", [])
 
 if not nodes:
