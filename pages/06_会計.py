@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as _components
 from utils.ai_advisor import get_ai_response_accounting, extract_delivery_note
 from utils.sheets_loader import load_sheets, append_cost_row, upload_delivery_photo, search_delivery_photos
 from utils.notion_sync import (save_accounting_log, save_accounting_decision, load_accounting_decisions,
@@ -156,6 +157,8 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                        horizontal=True, label_visibility="collapsed", key="reg_subtab")
 
 if reg_sub == "🛒 仕入れを登録する":
+    if st.session_state.pop("_scroll_top", False):
+        _components.html("<script>window.parent.document.querySelector('section.main').scrollTo(0,0);</script>", height=0)
     st.subheader("🛒 仕入れを登録する")
     st.caption("仕入れた商品を記録します。送料・消費税を自動計算してNotionに保存します。")
 
@@ -329,6 +332,11 @@ if reg_sub == "🛒 仕入れを登録する":
             hc2.markdown(f"**{_first['supplier']}**")
             hc3.caption(f"{len(_rows)} 商品")
             if hc4.button("✏️ 修正", key=f"edit_g_{_gkey}"):
+                # 古いウィジェットキーをすべて削除してから新データをセット
+                old_items = st.session_state.get("purchase_items", [])
+                for _i in range(len(old_items) + 10):
+                    for _k in (f"p_name_{_i}", f"p_price_{_i}", f"p_qty_{_i}"):
+                        st.session_state.pop(_k, None)
                 st.session_state["p_edit_page_ids"] = [r["page_id"] for r in _rows]
                 st.session_state["p_date_pre"]     = _first["purchase_date"]
                 st.session_state["p_supplier_pre"] = _first["supplier"]
@@ -339,6 +347,7 @@ if reg_sub == "🛒 仕入れを登録する":
                     {"name": r["product_name"], "unit_price": float(r["unit_price"]), "quantity": int(r["quantity"])}
                     for r in _rows
                 ]
+                st.session_state["_scroll_top"] = True
                 st.rerun()
             # 商品詳細（インデントして表示）
             for r in _rows:
