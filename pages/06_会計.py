@@ -398,11 +398,12 @@ if reg_sub == "💴 決まった売値の登録":
         purchase_recs = load_purchase_records(limit=30)
         if purchase_recs:
             for rec in purchase_recs:
-                c1, c2, c3, c4 = st.columns([2, 2, 3, 1])
+                c1, c2, c3, c4, c5 = st.columns([2, 2, 3, 2, 1])
                 c1.caption(rec["purchase_date"])
                 c2.caption(rec["supplier"])
                 c3.caption(rec["product_name"])
-                if c4.button("選択", key=f"sel_{rec['purchase_date']}_{rec['product_name']}"):
+                c4.caption(f"¥{rec['total_unit_price']:.1f}")
+                if c5.button("選択", key=f"sel_{rec['purchase_date']}_{rec['product_name']}"):
                     st.session_state["dec_item_pre"] = rec["product_name"]
                     st.session_state["_dec_scroll"] = True
                     st.rerun()
@@ -411,7 +412,7 @@ if reg_sub == "💴 決まった売値の登録":
 
     dec_item  = st.text_input("品物名",      key="dec_item",  placeholder="例：ネーブルオレンジ")
     dec_qty   = st.text_input("量",          key="dec_qty",   placeholder="例：1個、1kg、1箱")
-    dec_price = st.text_input("金額（円）",   key="dec_price", placeholder="例：500円")
+    dec_price = st.text_input("売値（円）",   key="dec_price", placeholder="例：500円")
     dec_note  = st.text_input("備考（任意）", key="dec_note",  placeholder="例：パンダ広場・いきいき共通")
 
     dec_edit_page_id = st.session_state.get("dec_edit_page_id")
