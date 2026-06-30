@@ -381,6 +381,16 @@ if reg_sub == "💴 決まった売値の登録":
         if _k not in st.session_state:
             st.session_state[_k] = ""
 
+    # アンカー（選択ボタン後のスクロール先）—— expanderより前に置く
+    st.markdown('<div id="dec-form-top"></div>', unsafe_allow_html=True)
+    if _do_dec_scroll:
+        _components.html("""<script>
+          setTimeout(function(){
+            var el = window.parent.document.getElementById('dec-form-top');
+            if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+          }, 100);
+        </script>""", height=0)
+
     # 仕入れ済み商品から選ぶ
     with st.expander("📋 仕入れ済み商品から選ぶ", expanded=False):
         purchase_recs = load_purchase_records(limit=30)
@@ -396,15 +406,6 @@ if reg_sub == "💴 決まった売値の登録":
                     st.rerun()
         else:
             st.caption("まだ仕入れ記録がありません。")
-
-    st.markdown('<div id="dec-form-top"></div>', unsafe_allow_html=True)
-    if _do_dec_scroll:
-        _components.html("""<script>
-          setTimeout(function(){
-            var el = window.parent.document.getElementById('dec-form-top');
-            if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-          }, 100);
-        </script>""", height=0)
 
     dec_item  = st.text_input("品物名",      key="dec_item",  placeholder="例：ネーブルオレンジ")
     dec_qty   = st.text_input("量",          key="dec_qty",   placeholder="例：1個、1kg、1箱")
