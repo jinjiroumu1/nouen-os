@@ -157,12 +157,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                        horizontal=True, label_visibility="collapsed", key="reg_subtab")
 
 if reg_sub == "🛒 仕入れを登録する":
-    if st.session_state.pop("_scroll_top", False):
-        _components.html("""<script>
-          var main = window.parent.document.querySelector('.main');
-          if(main) main.scrollTop = 0;
-          window.parent.scrollTo(0,0);
-        </script>""", height=0)
+    _do_scroll = st.session_state.pop("_scroll_top", False)
     st.subheader("🛒 仕入れを登録する")
     st.caption("仕入れた商品を記録します。送料・消費税を自動計算してNotionに保存します。")
 
@@ -206,6 +201,16 @@ if reg_sub == "🛒 仕入れを登録する":
 
     if "purchase_items" not in st.session_state:
         st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
+
+    # 仕入日入力欄へのアンカー（修正ボタン後のスクロール先）
+    st.markdown('<div id="purchase-form-top"></div>', unsafe_allow_html=True)
+    if _do_scroll:
+        _components.html("""<script>
+          setTimeout(function(){
+            var el = window.parent.document.getElementById('purchase-form-top');
+            if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+          }, 100);
+        </script>""", height=0)
 
     col_d, col_s, col_t = st.columns(3)
     with col_d:
