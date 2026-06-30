@@ -271,7 +271,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                 "個数":             it["quantity"],
                 "逆算単価（税込）": f"¥{taxed_price:.1f}",
                 "1個あたり按分送料": f"¥{ship_per_unit:.1f}",
-                "商品単価合計":     f"¥{total_unit:.1f}",
+                "送料込み商品単価": f"¥{total_unit:.1f}",
             })
         import pandas as _pd
         st.dataframe(_pd.DataFrame(preview_rows), use_container_width=True, hide_index=True)
@@ -362,7 +362,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                 for r in _rows:
                     dc1, dc2, dc3 = st.columns([4, 2, 2])
                     dc1.caption(f"　{r['product_name']}")
-                    dc2.caption(f"送料込み商品単価 ¥{r['total_unit_price']:.1f}")
+                    dc2.caption(f"¥{r['total_unit_price']:.1f}")
                     dc3.caption(f"{r['quantity']}個")
                 st.markdown("---")
         else:
