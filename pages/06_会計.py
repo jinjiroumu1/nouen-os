@@ -362,7 +362,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                 for r in _rows:
                     dc1, dc2, dc3 = st.columns([4, 2, 2])
                     dc1.caption(f"　{r['product_name']}")
-                    dc2.caption(f"¥{r['total_unit_price']:.1f}")
+                    dc2.caption(f"単価合計（税込）¥{r['total_unit_price']:.1f}")
                     dc3.caption(f"{r['quantity']}個")
                 st.markdown("---")
         else:
