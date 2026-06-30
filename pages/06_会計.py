@@ -156,297 +156,297 @@ div[data-testid="stRadio"] label[data-checked="true"] {
     reg_sub = st.radio("", ["🛒 仕入れを登録する", "💴 決まった売値の登録"],
                        horizontal=True, label_visibility="collapsed", key="reg_subtab")
 
-if reg_sub == "🛒 仕入れを登録する":
-    _do_scroll = st.session_state.pop("_scroll_top", False)
-    st.subheader("🛒 仕入れを登録する")
-    st.caption("仕入れた商品を記録します。送料・消費税を自動計算してNotionに保存します。")
+    if reg_sub == "🛒 仕入れを登録する":
+        _do_scroll = st.session_state.pop("_scroll_top", False)
+        st.subheader("🛒 仕入れを登録する")
+        st.caption("仕入れた商品を記録します。送料・消費税を自動計算してNotionに保存します。")
 
-    with st.expander("📷 納品書写真から原価計算", expanded=False):
-        st.warning("※手書きの納品書は認識精度が低いため、使用しないでください。印字された納品書のみ対応しています。")
-        st.caption("納品書をアップロードすると複数商品をまとめて読み取ります。")
-        dn_uploaded = st.file_uploader("納品書画像（JPG / PNG）", type=["jpg", "jpeg", "png"], key="dn_upload_top")
-        if dn_uploaded:
-            st.image(dn_uploaded, width=300)
-            if st.button("🔍 AIで情報を抽出する", key="dn_extract_top"):
-                with st.spinner("勘ちゃんが読み取っています…"):
-                    mime = "image/jpeg" if dn_uploaded.type in ("image/jpeg", "image/jpg") else "image/png"
-                    img_bytes = dn_uploaded.read()
-                    result = extract_delivery_note(img_bytes, mime)
-                if "error" in result:
-                    st.error(f"抽出エラー: {result['error']}")
-                else:
-                    items_dn = result.get("items") or []
-                    if not items_dn:
-                        items_dn = [{"product_name": "", "purchase_price": 0, "total_quantity": 0, "unit_quantity": 0, "unit": "g"}]
-                    st.session_state["dn_date"]      = str(result.get("date") or "")
-                    st.session_state["dn_farmer"]    = str(result.get("farmer_name") or "")
-                    st.session_state["dn_shipping"]  = float(result.get("shipping_fee") or 0)
-                    st.session_state["dn_items"]     = items_dn
-                    st.session_state["dn_image"]     = img_bytes
-                    st.session_state["dn_orig_name"] = dn_uploaded.name
-                    st.success(f"抽出完了！{len(items_dn)} 商品を読み取りました。下の「📷 納品書写真から原価計算」セクションで確認・保存してください。")
+        with st.expander("📷 納品書写真から原価計算", expanded=False):
+            st.warning("※手書きの納品書は認識精度が低いため、使用しないでください。印字された納品書のみ対応しています。")
+            st.caption("納品書をアップロードすると複数商品をまとめて読み取ります。")
+            dn_uploaded = st.file_uploader("納品書画像（JPG / PNG）", type=["jpg", "jpeg", "png"], key="dn_upload_top")
+            if dn_uploaded:
+                st.image(dn_uploaded, width=300)
+                if st.button("🔍 AIで情報を抽出する", key="dn_extract_top"):
+                    with st.spinner("勘ちゃんが読み取っています…"):
+                        mime = "image/jpeg" if dn_uploaded.type in ("image/jpeg", "image/jpg") else "image/png"
+                        img_bytes = dn_uploaded.read()
+                        result = extract_delivery_note(img_bytes, mime)
+                    if "error" in result:
+                        st.error(f"抽出エラー: {result['error']}")
+                    else:
+                        items_dn = result.get("items") or []
+                        if not items_dn:
+                            items_dn = [{"product_name": "", "purchase_price": 0, "total_quantity": 0, "unit_quantity": 0, "unit": "g"}]
+                        st.session_state["dn_date"]      = str(result.get("date") or "")
+                        st.session_state["dn_farmer"]    = str(result.get("farmer_name") or "")
+                        st.session_state["dn_shipping"]  = float(result.get("shipping_fee") or 0)
+                        st.session_state["dn_items"]     = items_dn
+                        st.session_state["dn_image"]     = img_bytes
+                        st.session_state["dn_orig_name"] = dn_uploaded.name
+                        st.success(f"抽出完了！{len(items_dn)} 商品を読み取りました。下の「📷 納品書写真から原価計算」セクションで確認・保存してください。")
 
-    # プリセットキー → ウィジェットキーへ転送（widget描画前）
-    import datetime as _dt
-    for _f, _t in [("p_supplier_pre","p_supplier"),("p_tax_pre","p_tax"),
-                   ("p_shipping_pre","p_shipping"),("p_note_pre","p_note")]:
-        if _f in st.session_state:
-            st.session_state[_t] = st.session_state.pop(_f)
-    if "p_date_pre" in st.session_state:
-        _d = st.session_state.pop("p_date_pre")
-        try:
-            st.session_state["p_date"] = _dt.date.fromisoformat(str(_d)) if _d else _dt.date.today()
-        except ValueError:
-            st.session_state["p_date"] = _dt.date.today()
+        # プリセットキー → ウィジェットキーへ転送（widget描画前）
+        import datetime as _dt
+        for _f, _t in [("p_supplier_pre","p_supplier"),("p_tax_pre","p_tax"),
+                       ("p_shipping_pre","p_shipping"),("p_note_pre","p_note")]:
+            if _f in st.session_state:
+                st.session_state[_t] = st.session_state.pop(_f)
+        if "p_date_pre" in st.session_state:
+            _d = st.session_state.pop("p_date_pre")
+            try:
+                st.session_state["p_date"] = _dt.date.fromisoformat(str(_d)) if _d else _dt.date.today()
+            except ValueError:
+                st.session_state["p_date"] = _dt.date.today()
 
-    if "purchase_items" not in st.session_state:
-        st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
+        if "purchase_items" not in st.session_state:
+            st.session_state.purchase_items = [{"name": "", "unit_price": 0.0, "quantity": 1}]
 
-    # 仕入日入力欄へのアンカー（修正ボタン後のスクロール先）
-    st.markdown('<div id="purchase-form-top"></div>', unsafe_allow_html=True)
-    if _do_scroll:
-        _components.html("""<script>
-          setTimeout(function(){
-            var el = window.parent.document.getElementById('purchase-form-top');
-            if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-          }, 300);
-        </script>""", height=0)
+        # 仕入日入力欄へのアンカー（修正ボタン後のスクロール先）
+        st.markdown('<div id="purchase-form-top"></div>', unsafe_allow_html=True)
+        if _do_scroll:
+            _components.html("""<script>
+              setTimeout(function(){
+                var el = window.parent.document.getElementById('purchase-form-top');
+                if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+              }, 300);
+            </script>""", height=0)
 
-    col_d, col_s, col_t = st.columns(3)
-    with col_d:
-        p_date = st.date_input("仕入日", key="p_date")
-    with col_s:
-        p_supplier = st.text_input("取引先", placeholder="例：二見酒店", key="p_supplier")
-    with col_t:
-        p_tax = st.radio("消費税区分", ["税込", "税別"], horizontal=True, key="p_tax")
+        col_d, col_s, col_t = st.columns(3)
+        with col_d:
+            p_date = st.date_input("仕入日", key="p_date")
+        with col_s:
+            p_supplier = st.text_input("取引先", placeholder="例：二見酒店", key="p_supplier")
+        with col_t:
+            p_tax = st.radio("消費税区分", ["税込", "税別"], horizontal=True, key="p_tax")
 
-    p_shipping = st.number_input("送料（円・任意）", min_value=0.0, step=10.0, key="p_shipping")
+        p_shipping = st.number_input("送料（円・任意）", min_value=0.0, step=10.0, key="p_shipping")
 
-    st.markdown("**商品リスト**")
-    _rev = st.session_state.get("p_item_rev", 0)
-    items = st.session_state.purchase_items
-    for i, item in enumerate(items):
-        c1, c2, c3, c4 = st.columns([4, 2, 2, 1])
-        with c1:
-            items[i]["name"] = st.text_input("商品名", value=item["name"], placeholder="例：A生樽20L", key=f"p_name_{_rev}_{i}")
-        with c2:
-            items[i]["unit_price"] = st.number_input("商品単価（円）", value=float(item["unit_price"]), step=1.0, key=f"p_price_{_rev}_{i}")
-        with c3:
-            items[i]["quantity"] = st.number_input("仕入個数", value=int(item["quantity"]), min_value=1, step=1, key=f"p_qty_{_rev}_{i}")
-        with c4:
-            if st.button("🗑️", key=f"p_del_{_rev}_{i}") and len(items) > 1:
-                st.session_state.purchase_items.pop(i)
-                st.rerun()
+        st.markdown("**商品リスト**")
+        _rev = st.session_state.get("p_item_rev", 0)
+        items = st.session_state.purchase_items
+        for i, item in enumerate(items):
+            c1, c2, c3, c4 = st.columns([4, 2, 2, 1])
+            with c1:
+                items[i]["name"] = st.text_input("商品名", value=item["name"], placeholder="例：A生樽20L", key=f"p_name_{_rev}_{i}")
+            with c2:
+                items[i]["unit_price"] = st.number_input("商品単価（円）", value=float(item["unit_price"]), step=1.0, key=f"p_price_{_rev}_{i}")
+            with c3:
+                items[i]["quantity"] = st.number_input("仕入個数", value=int(item["quantity"]), min_value=1, step=1, key=f"p_qty_{_rev}_{i}")
+            with c4:
+                if st.button("🗑️", key=f"p_del_{_rev}_{i}") and len(items) > 1:
+                    st.session_state.purchase_items.pop(i)
+                    st.rerun()
 
-    if st.button("➕ 商品を追加", key=f"p_add_{_rev}"):
-        st.session_state.purchase_items.append({"name": "", "unit_price": 0.0, "quantity": 1})
-        st.rerun()
-
-    p_note = st.text_input("備考（任意）", key="p_note")
-
-    # 計算プレビュー
-    total_qty = sum(it["quantity"] for it in items)
-    # 計算ロジックを共通化
-    def _calc(it):
-        base = it["unit_price"]
-        if p_tax == "税別":
-            taxed_price = base * 1.08
-            ship_per_unit = (p_shipping * 1.10 / total_qty) if total_qty > 0 else 0
-        else:
-            taxed_price = base
-            ship_per_unit = (p_shipping / total_qty) if total_qty > 0 else 0
-        total_unit = taxed_price + ship_per_unit
-        return taxed_price, ship_per_unit, total_unit
-
-    st.markdown("---")
-    tax_note = "（単価×1.08、送料×1.10で按分）" if p_tax == "税別" else "（税込のまま按分）"
-    st.markdown(f"**📊 計算プレビュー** {tax_note}")
-    preview_rows = []
-    for it in items:
-        taxed_price, ship_per_unit, total_unit = _calc(it)
-        preview_rows.append({
-            "商品名":           it["name"] or "（未入力）",
-            "単価（税込）":     f"¥{taxed_price:.1f}",
-            "個数":             it["quantity"],
-            "1個あたり按分送料": f"¥{ship_per_unit:.1f}",
-            "商品単価合計":     f"¥{total_unit:.1f}",
-        })
-    import pandas as _pd
-    st.dataframe(_pd.DataFrame(preview_rows), use_container_width=True, hide_index=True)
-
-    edit_page_ids = st.session_state.get("p_edit_page_ids", [])
-    is_edit = bool(edit_page_ids)
-    btn_label = "💾 修正を保存する" if is_edit else "💾 仕入れを保存する"
-    if is_edit:
-        st.info(f"✏️ 修正モード：{len(edit_page_ids)} 件を上書き保存します")
-
-    if st.button(btn_label, key="p_save"):
-        errors = []
-        n_items = len(items)
-        for idx, it in enumerate(items):
-            taxed_price, ship_per_unit, total_unit = _calc(it)
-            if is_edit and idx < len(edit_page_ids):
-                ok, err_msg = update_purchase_record(
-                    page_id          = edit_page_ids[idx],
-                    purchase_date    = str(p_date),
-                    supplier         = p_supplier,
-                    product_name     = it["name"],
-                    unit_price       = it["unit_price"],
-                    quantity         = it["quantity"],
-                    shipping         = round(ship_per_unit, 1),
-                    tax_type         = p_tax,
-                    total_unit_price = round(total_unit, 1),
-                    note             = p_note,
-                )
-            else:
-                ok, err_msg = save_purchase_record(
-                    purchase_date    = str(p_date),
-                    supplier         = p_supplier,
-                    product_name     = it["name"],
-                    unit_price       = it["unit_price"],
-                    quantity         = it["quantity"],
-                    shipping         = round(ship_per_unit, 1),
-                    tax_type         = p_tax,
-                    total_unit_price = round(total_unit, 1),
-                    note             = p_note,
-                )
-            if not ok:
-                errors.append(f"{it['name'] or '（未入力）'}: {err_msg}")
-        if errors:
-            st.error("保存失敗:\n" + "\n".join(errors))
-        else:
-            st.success("✅ 修正を保存しました！" if is_edit else f"✅ {n_items} 件の仕入れを保存しました！")
-            for k in ["purchase_items", "p_date", "p_supplier", "p_tax", "p_shipping",
-                       "p_note", "p_edit_page_ids", "p_item_rev"]:
-                st.session_state.pop(k, None)
+        if st.button("➕ 商品を追加", key=f"p_add_{_rev}"):
+            st.session_state.purchase_items.append({"name": "", "unit_price": 0.0, "quantity": 1})
             st.rerun()
 
-    # ── 保存済み仕入れ記録 ───────────────────────────
-    st.markdown("---")
-    st.markdown("**📋 保存済み仕入れ記録（直近20件）**")
-    purchase_logs = load_purchase_records(limit=20)
-    if purchase_logs:
-        # 仕入日＋取引先でグループ化（順序保持）
-        _groups: dict[str, list] = {}
-        for r in purchase_logs:
-            _key = f"{r['purchase_date']}||{r['supplier']}"
-            _groups.setdefault(_key, []).append(r)
+        p_note = st.text_input("備考（任意）", key="p_note")
 
-        for _gkey, _rows in _groups.items():
-            _first = _rows[0]
-            # グループヘッダー行（仕入日・取引先・商品数・修正ボタン）
-            hc1, hc2, hc3, hc4 = st.columns([2, 3, 2, 1])
-            hc1.markdown(f"**{_first['purchase_date']}**")
-            hc2.markdown(f"**{_first['supplier']}**")
-            hc3.caption(f"{len(_rows)} 商品")
-            if hc4.button("✏️ 修正", key=f"edit_g_{_gkey}"):
-                st.session_state["p_edit_page_ids"] = [r["page_id"] for r in _rows]
-                st.session_state["p_date_pre"]     = _first["purchase_date"]
-                st.session_state["p_supplier_pre"] = _first["supplier"]
-                st.session_state["p_tax_pre"]      = _first["tax_type"]
-                st.session_state["p_shipping_pre"] = float(_first["shipping"]) * len(_rows)
-                st.session_state["p_note_pre"]     = _first["note"]
-                st.session_state["purchase_items"] = [
-                    {"name": r["product_name"], "unit_price": float(r["unit_price"]), "quantity": int(r["quantity"])}
-                    for r in _rows
-                ]
-                # リビジョンを上げてウィジェットキーを完全に切り替える
-                st.session_state["p_item_rev"] = st.session_state.get("p_item_rev", 0) + 1
-                st.session_state["_scroll_top"] = True
+        # 計算プレビュー
+        total_qty = sum(it["quantity"] for it in items)
+        # 計算ロジックを共通化
+        def _calc(it):
+            base = it["unit_price"]
+            if p_tax == "税別":
+                taxed_price = base * 1.08
+                ship_per_unit = (p_shipping * 1.10 / total_qty) if total_qty > 0 else 0
+            else:
+                taxed_price = base
+                ship_per_unit = (p_shipping / total_qty) if total_qty > 0 else 0
+            total_unit = taxed_price + ship_per_unit
+            return taxed_price, ship_per_unit, total_unit
+
+        st.markdown("---")
+        tax_note = "（単価×1.08、送料×1.10で按分）" if p_tax == "税別" else "（税込のまま按分）"
+        st.markdown(f"**📊 計算プレビュー** {tax_note}")
+        preview_rows = []
+        for it in items:
+            taxed_price, ship_per_unit, total_unit = _calc(it)
+            preview_rows.append({
+                "商品名":           it["name"] or "（未入力）",
+                "単価（税込）":     f"¥{taxed_price:.1f}",
+                "個数":             it["quantity"],
+                "1個あたり按分送料": f"¥{ship_per_unit:.1f}",
+                "商品単価合計":     f"¥{total_unit:.1f}",
+            })
+        import pandas as _pd
+        st.dataframe(_pd.DataFrame(preview_rows), use_container_width=True, hide_index=True)
+
+        edit_page_ids = st.session_state.get("p_edit_page_ids", [])
+        is_edit = bool(edit_page_ids)
+        btn_label = "💾 修正を保存する" if is_edit else "💾 仕入れを保存する"
+        if is_edit:
+            st.info(f"✏️ 修正モード：{len(edit_page_ids)} 件を上書き保存します")
+
+        if st.button(btn_label, key="p_save"):
+            errors = []
+            n_items = len(items)
+            for idx, it in enumerate(items):
+                taxed_price, ship_per_unit, total_unit = _calc(it)
+                if is_edit and idx < len(edit_page_ids):
+                    ok, err_msg = update_purchase_record(
+                        page_id          = edit_page_ids[idx],
+                        purchase_date    = str(p_date),
+                        supplier         = p_supplier,
+                        product_name     = it["name"],
+                        unit_price       = it["unit_price"],
+                        quantity         = it["quantity"],
+                        shipping         = round(ship_per_unit, 1),
+                        tax_type         = p_tax,
+                        total_unit_price = round(total_unit, 1),
+                        note             = p_note,
+                    )
+                else:
+                    ok, err_msg = save_purchase_record(
+                        purchase_date    = str(p_date),
+                        supplier         = p_supplier,
+                        product_name     = it["name"],
+                        unit_price       = it["unit_price"],
+                        quantity         = it["quantity"],
+                        shipping         = round(ship_per_unit, 1),
+                        tax_type         = p_tax,
+                        total_unit_price = round(total_unit, 1),
+                        note             = p_note,
+                    )
+                if not ok:
+                    errors.append(f"{it['name'] or '（未入力）'}: {err_msg}")
+            if errors:
+                st.error("保存失敗:\n" + "\n".join(errors))
+            else:
+                st.success("✅ 修正を保存しました！" if is_edit else f"✅ {n_items} 件の仕入れを保存しました！")
+                for k in ["purchase_items", "p_date", "p_supplier", "p_tax", "p_shipping",
+                           "p_note", "p_edit_page_ids", "p_item_rev"]:
+                    st.session_state.pop(k, None)
                 st.rerun()
-            # 商品詳細（インデントして表示）
-            for r in _rows:
-                dc1, dc2, dc3 = st.columns([4, 2, 2])
-                dc1.caption(f"　{r['product_name']}")
-                dc2.caption(f"¥{r['total_unit_price']:.1f}")
-                dc3.caption(f"{r['quantity']}個")
-            st.markdown("---")
-    else:
-        st.caption("まだ仕入れ記録がありません。")
 
-if reg_sub == "💴 決まった売値の登録":
-    # ── 決まった売値の登録 ──────────────────────────
-    _do_dec_scroll = st.session_state.pop("_dec_scroll", False)
-    st.subheader("💴 決まった売値の登録")
-    st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
+        # ── 保存済み仕入れ記録 ───────────────────────────
+        st.markdown("---")
+        st.markdown("**📋 保存済み仕入れ記録（直近20件）**")
+        purchase_logs = load_purchase_records(limit=20)
+        if purchase_logs:
+            # 仕入日＋取引先でグループ化（順序保持）
+            _groups: dict[str, list] = {}
+            for r in purchase_logs:
+                _key = f"{r['purchase_date']}||{r['supplier']}"
+                _groups.setdefault(_key, []).append(r)
 
-    # プリセットキー → ウィジェットキーへ転送（widget描画前に行うことでエラーを回避）
-    for _f, _t in [("dec_item_pre","dec_item"),("dec_qty_pre","dec_qty"),
-                   ("dec_price_pre","dec_price"),("dec_note_pre","dec_note")]:
-        if _f in st.session_state:
-            st.session_state[_t] = st.session_state.pop(_f)
-
-    # session_state キー初期化
-    for _k in ("dec_item","dec_qty","dec_price","dec_note"):
-        if _k not in st.session_state:
-            st.session_state[_k] = ""
-
-    # 選択後スクロール： window.parent.scrollTo で固定Y座標へ移動
-    _DEC_SCROLL_Y = 600  # ← ずれる場合はこの値を調整（px）
-    if _do_dec_scroll:
-        _components.html(f"""<script>
-          setTimeout(function(){{
-            window.parent.scrollTo({{top: {_DEC_SCROLL_Y}, behavior: 'smooth'}});
-          }}, 300);
-        </script>""", height=0)
-
-    # 仕入れ済み商品から選ぶ
-    with st.expander("📋 仕入れ済み商品から選ぶ", expanded=False):
-        purchase_recs = load_purchase_records(limit=30)
-        if purchase_recs:
-            for rec in purchase_recs:
-                c1, c2, c3, c4, c5 = st.columns([2, 2, 3, 2, 1])
-                c1.caption(rec["purchase_date"])
-                c2.caption(rec["supplier"])
-                c3.caption(rec["product_name"])
-                c4.caption(f"¥{rec['total_unit_price']:.1f}")
-                if c5.button("選択", key=f"sel_{rec['page_id']}"):
-                    st.session_state["dec_item_pre"] = rec["product_name"]
-                    st.session_state["_dec_scroll"] = True
+            for _gkey, _rows in _groups.items():
+                _first = _rows[0]
+                # グループヘッダー行（仕入日・取引先・商品数・修正ボタン）
+                hc1, hc2, hc3, hc4 = st.columns([2, 3, 2, 1])
+                hc1.markdown(f"**{_first['purchase_date']}**")
+                hc2.markdown(f"**{_first['supplier']}**")
+                hc3.caption(f"{len(_rows)} 商品")
+                if hc4.button("✏️ 修正", key=f"edit_g_{_gkey}"):
+                    st.session_state["p_edit_page_ids"] = [r["page_id"] for r in _rows]
+                    st.session_state["p_date_pre"]     = _first["purchase_date"]
+                    st.session_state["p_supplier_pre"] = _first["supplier"]
+                    st.session_state["p_tax_pre"]      = _first["tax_type"]
+                    st.session_state["p_shipping_pre"] = float(_first["shipping"]) * len(_rows)
+                    st.session_state["p_note_pre"]     = _first["note"]
+                    st.session_state["purchase_items"] = [
+                        {"name": r["product_name"], "unit_price": float(r["unit_price"]), "quantity": int(r["quantity"])}
+                        for r in _rows
+                    ]
+                    # リビジョンを上げてウィジェットキーを完全に切り替える
+                    st.session_state["p_item_rev"] = st.session_state.get("p_item_rev", 0) + 1
+                    st.session_state["_scroll_top"] = True
                     st.rerun()
+                # 商品詳細（インデントして表示）
+                for r in _rows:
+                    dc1, dc2, dc3 = st.columns([4, 2, 2])
+                    dc1.caption(f"　{r['product_name']}")
+                    dc2.caption(f"¥{r['total_unit_price']:.1f}")
+                    dc3.caption(f"{r['quantity']}個")
+                st.markdown("---")
         else:
             st.caption("まだ仕入れ記録がありません。")
 
-    dec_item  = st.text_input("品物名",      key="dec_item",  placeholder="例：ネーブルオレンジ")
-    dec_qty   = st.text_input("量",          key="dec_qty",   placeholder="例：1個、1kg、1箱")
-    dec_price = st.text_input("売値（円）",   key="dec_price", placeholder="例：500円")
-    dec_note  = st.text_input("備考（任意）", key="dec_note",  placeholder="例：パンダ広場・いきいき共通")
+    if reg_sub == "💴 決まった売値の登録":
+        # ── 決まった売値の登録 ──────────────────────────
+        _do_dec_scroll = st.session_state.pop("_dec_scroll", False)
+        st.subheader("💴 決まった売値の登録")
+        st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
 
-    dec_edit_page_id = st.session_state.get("dec_edit_page_id")
-    if dec_edit_page_id:
-        st.info("✏️ 修正モード：上書き保存されます")
+        # プリセットキー → ウィジェットキーへ転送（widget描画前に行うことでエラーを回避）
+        for _f, _t in [("dec_item_pre","dec_item"),("dec_qty_pre","dec_qty"),
+                       ("dec_price_pre","dec_price"),("dec_note_pre","dec_note")]:
+            if _f in st.session_state:
+                st.session_state[_t] = st.session_state.pop(_f)
 
-    if st.button("💾 修正を保存する" if dec_edit_page_id else "💾 保存する", key="dec_save"):
-        if dec_item and dec_price:
-            if dec_edit_page_id:
-                ok = update_accounting_decision(dec_edit_page_id, dec_item, dec_qty, dec_price, dec_note)
+        # session_state キー初期化
+        for _k in ("dec_item","dec_qty","dec_price","dec_note"):
+            if _k not in st.session_state:
+                st.session_state[_k] = ""
+
+        # 選択後スクロール： window.parent.scrollTo で固定Y座標へ移動
+        _DEC_SCROLL_Y = 600  # ← ずれる場合はこの値を調整（px）
+        if _do_dec_scroll:
+            _components.html(f"""<script>
+              setTimeout(function(){{
+                window.parent.scrollTo({{top: {_DEC_SCROLL_Y}, behavior: 'smooth'}});
+              }}, 300);
+            </script>""", height=0)
+
+        # 仕入れ済み商品から選ぶ
+        with st.expander("📋 仕入れ済み商品から選ぶ", expanded=False):
+            purchase_recs = load_purchase_records(limit=30)
+            if purchase_recs:
+                for rec in purchase_recs:
+                    c1, c2, c3, c4, c5 = st.columns([2, 2, 3, 2, 1])
+                    c1.caption(rec["purchase_date"])
+                    c2.caption(rec["supplier"])
+                    c3.caption(rec["product_name"])
+                    c4.caption(f"¥{rec['total_unit_price']:.1f}")
+                    if c5.button("選択", key=f"sel_{rec['page_id']}"):
+                        st.session_state["dec_item_pre"] = rec["product_name"]
+                        st.session_state["_dec_scroll"] = True
+                        st.rerun()
             else:
-                ok = save_accounting_decision(dec_item, "🏷️ 売値", dec_qty, dec_price, dec_note)
-            if ok:
-                st.success("✅ 修正を保存しました！" if dec_edit_page_id else "✅ 決め事を保存しました！")
-                for k in ("dec_item", "dec_qty", "dec_price", "dec_note", "dec_edit_page_id"):
-                    st.session_state.pop(k, None)
-                st.rerun()
+                st.caption("まだ仕入れ記録がありません。")
+
+        dec_item  = st.text_input("品物名",      key="dec_item",  placeholder="例：ネーブルオレンジ")
+        dec_qty   = st.text_input("量",          key="dec_qty",   placeholder="例：1個、1kg、1箱")
+        dec_price = st.text_input("売値（円）",   key="dec_price", placeholder="例：500円")
+        dec_note  = st.text_input("備考（任意）", key="dec_note",  placeholder="例：パンダ広場・いきいき共通")
+
+        dec_edit_page_id = st.session_state.get("dec_edit_page_id")
+        if dec_edit_page_id:
+            st.info("✏️ 修正モード：上書き保存されます")
+
+        if st.button("💾 修正を保存する" if dec_edit_page_id else "💾 保存する", key="dec_save"):
+            if dec_item and dec_price:
+                if dec_edit_page_id:
+                    ok = update_accounting_decision(dec_edit_page_id, dec_item, dec_qty, dec_price, dec_note)
+                else:
+                    ok = save_accounting_decision(dec_item, "🏷️ 売値", dec_qty, dec_price, dec_note)
+                if ok:
+                    st.success("✅ 修正を保存しました！" if dec_edit_page_id else "✅ 決め事を保存しました！")
+                    for k in ("dec_item", "dec_qty", "dec_price", "dec_note", "dec_edit_page_id"):
+                        st.session_state.pop(k, None)
+                    st.rerun()
+                else:
+                    st.error("保存に失敗しました。Notion設定を確認してください。")
             else:
-                st.error("保存に失敗しました。Notion設定を確認してください。")
+                st.warning("品物名と金額は必須です。")
+
+        decisions = load_accounting_decisions()
+        if decisions:
+            st.markdown("**📋 登録済みの決め事**")
+            for d in decisions:
+                qty  = f"　{d['quantity']}" if d.get("quantity") else ""
+                note = f"　（{d['note']}）" if d.get("note") else ""
+                c1, c2 = st.columns([8, 1])
+                c1.markdown(f"**{d['item_name']}**{qty}　→　{d['price']}{note}")
+                if c2.button("✏️", key=f"edit_d_{d['page_id']}"):
+                    st.session_state["dec_edit_page_id"] = d["page_id"]
+                    st.session_state["dec_item_pre"]  = d["item_name"]
+                    st.session_state["dec_qty_pre"]   = d["quantity"]
+                    st.session_state["dec_price_pre"] = d["price"]
+                    st.session_state["dec_note_pre"]  = d["note"]
+                    st.rerun()
         else:
-            st.warning("品物名と金額は必須です。")
-
-    decisions = load_accounting_decisions()
-    if decisions:
-        st.markdown("**📋 登録済みの決め事**")
-        for d in decisions:
-            qty  = f"　{d['quantity']}" if d.get("quantity") else ""
-            note = f"　（{d['note']}）" if d.get("note") else ""
-            c1, c2 = st.columns([8, 1])
-            c1.markdown(f"**{d['item_name']}**{qty}　→　{d['price']}{note}")
-            if c2.button("✏️", key=f"edit_d_{d['page_id']}"):
-                st.session_state["dec_edit_page_id"] = d["page_id"]
-                st.session_state["dec_item_pre"]  = d["item_name"]
-                st.session_state["dec_qty_pre"]   = d["quantity"]
-                st.session_state["dec_price_pre"] = d["price"]
-                st.session_state["dec_note_pre"]  = d["note"]
-                st.rerun()
-    else:
-        st.caption("まだ決め事が登録されていません。")
+            st.caption("まだ決め事が登録されていません。")
 
