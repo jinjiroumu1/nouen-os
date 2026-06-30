@@ -403,7 +403,7 @@ if reg_sub == "💴 決まった売値の登録":
                 c2.caption(rec["supplier"])
                 c3.caption(rec["product_name"])
                 c4.caption(f"¥{rec['total_unit_price']:.1f}")
-                if c5.button("選択", key=f"sel_{rec['purchase_date']}_{rec['product_name']}"):
+                if c5.button("選択", key=f"sel_{rec['page_id']}"):
                     st.session_state["dec_item_pre"] = rec["product_name"]
                     st.session_state["_dec_scroll"] = True
                     st.rerun()
