@@ -366,6 +366,7 @@ if reg_sub == "🛒 仕入れを登録する":
 
 if reg_sub == "💴 決まった売値の登録":
     # ── 決まった売値の登録 ──────────────────────────
+    _do_dec_scroll = st.session_state.pop("_dec_scroll", False)
     st.subheader("💴 決まった売値の登録")
     st.caption("売値・ルールなどチームの決め事を記録してAI勘ちゃんが参照します。")
 
@@ -391,9 +392,19 @@ if reg_sub == "💴 決まった売値の登録":
                 c3.caption(rec["product_name"])
                 if c4.button("選択", key=f"sel_{rec['purchase_date']}_{rec['product_name']}"):
                     st.session_state["dec_item_pre"] = rec["product_name"]
+                    st.session_state["_dec_scroll"] = True
                     st.rerun()
         else:
             st.caption("まだ仕入れ記録がありません。")
+
+    st.markdown('<div id="dec-form-top"></div>', unsafe_allow_html=True)
+    if _do_dec_scroll:
+        _components.html("""<script>
+          setTimeout(function(){
+            var el = window.parent.document.getElementById('dec-form-top');
+            if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+          }, 100);
+        </script>""", height=0)
 
     dec_item  = st.text_input("品物名",      key="dec_item",  placeholder="例：ネーブルオレンジ")
     dec_qty   = st.text_input("量",          key="dec_qty",   placeholder="例：1個、1kg、1箱")
