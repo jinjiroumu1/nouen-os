@@ -209,7 +209,7 @@ if reg_sub == "🛒 仕入れを登録する":
           setTimeout(function(){
             var el = window.parent.document.getElementById('purchase-form-top');
             if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-          }, 100);
+          }, 300);
         </script>""", height=0)
 
     col_d, col_s, col_t = st.columns(3)
@@ -388,7 +388,7 @@ if reg_sub == "💴 決まった売値の登録":
           setTimeout(function(){
             var el = window.parent.document.getElementById('dec-form-top');
             if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-          }, 100);
+          }, 300);
         </script>""", height=0)
 
     # 仕入れ済み商品から選ぶ
