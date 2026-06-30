@@ -381,16 +381,13 @@ if reg_sub == "💴 決まった売値の登録":
         if _k not in st.session_state:
             st.session_state[_k] = ""
 
-    # デバッグ: スクロールフラグ確認（動作確認後に削除）
-    st.caption(f"[debug] _do_dec_scroll={_do_dec_scroll}")
-    # 選択後スクロール（仕入れ側と同じ方式）
-    st.markdown('<div id="dec-form-top"></div>', unsafe_allow_html=True)
+    # 選択後スクロール： window.parent.scrollTo で固定Y座標へ移動
+    _DEC_SCROLL_Y = 600  # ← ずれる場合はこの値を調整（px）
     if _do_dec_scroll:
-        _components.html("""<script>
-          setTimeout(function(){
-            var el = window.parent.document.getElementById('dec-form-top');
-            if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-          }, 300);
+        _components.html(f"""<script>
+          setTimeout(function(){{
+            window.parent.scrollTo({{top: {_DEC_SCROLL_Y}, behavior: 'smooth'}});
+          }}, 300);
         </script>""", height=0)
 
     # 仕入れ済み商品から選ぶ
