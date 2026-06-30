@@ -261,19 +261,20 @@ if reg_sub == "🛒 仕入れを登録する":
     import pandas as _pd
     st.dataframe(_pd.DataFrame(preview_rows), use_container_width=True, hide_index=True)
 
-    edit_page_id = st.session_state.get("p_edit_page_id")
-    btn_label = "💾 修正を保存する" if edit_page_id else "💾 仕入れを保存する"
-    if edit_page_id:
-        st.info("✏️ 修正モード：上書き保存されます")
+    edit_page_ids = st.session_state.get("p_edit_page_ids", [])
+    is_edit = bool(edit_page_ids)
+    btn_label = "💾 修正を保存する" if is_edit else "💾 仕入れを保存する"
+    if is_edit:
+        st.info(f"✏️ 修正モード：{len(edit_page_ids)} 件を上書き保存します")
 
     if st.button(btn_label, key="p_save"):
         errors = []
         n_items = len(items)
-        for it in items:
+        for idx, it in enumerate(items):
             taxed_price, ship_per_unit, total_unit = _calc(it)
-            if edit_page_id:
+            if is_edit and idx < len(edit_page_ids):
                 ok, err_msg = update_purchase_record(
-                    page_id          = edit_page_id,
+                    page_id          = edit_page_ids[idx],
                     purchase_date    = str(p_date),
                     supplier         = p_supplier,
                     product_name     = it["name"],
@@ -301,8 +302,8 @@ if reg_sub == "🛒 仕入れを登録する":
         if errors:
             st.error("保存失敗:\n" + "\n".join(errors))
         else:
-            st.success("✅ 修正を保存しました！" if edit_page_id else f"✅ {n_items} 件の仕入れを保存しました！")
-            keys_to_delete = ["purchase_items", "p_date", "p_supplier", "p_tax", "p_shipping", "p_note", "p_edit_page_id"]
+            st.success("✅ 修正を保存しました！" if is_edit else f"✅ {n_items} 件の仕入れを保存しました！")
+            keys_to_delete = ["purchase_items", "p_date", "p_supplier", "p_tax", "p_shipping", "p_note", "p_edit_page_ids"]
             for idx in range(n_items):
                 keys_to_delete += [f"p_name_{idx}", f"p_price_{idx}", f"p_qty_{idx}"]
             for k in keys_to_delete:
@@ -314,26 +315,38 @@ if reg_sub == "🛒 仕入れを登録する":
     st.markdown("**📋 保存済み仕入れ記録（直近20件）**")
     purchase_logs = load_purchase_records(limit=20)
     if purchase_logs:
+        # 仕入日＋取引先でグループ化（順序保持）
+        _groups: dict[str, list] = {}
         for r in purchase_logs:
-            c1, c2, c3, c4, c5, c6 = st.columns([2, 2, 3, 2, 1, 1])
-            c1.caption(r["purchase_date"])
-            c2.caption(r["supplier"])
-            c3.caption(r["product_name"])
-            c4.caption(f"¥{r['total_unit_price']:.1f}")
-            c5.caption(f"{r['quantity']}個")
-            if c6.button("✏️ 修正", key=f"edit_p_{r['page_id']}"):
-                st.session_state["p_edit_page_id"]  = r["page_id"]
-                st.session_state["p_date_pre"]      = r["purchase_date"]
-                st.session_state["p_supplier_pre"]  = r["supplier"]
-                st.session_state["p_tax_pre"]       = r["tax_type"]
-                st.session_state["p_shipping_pre"]  = float(r["shipping"])
-                st.session_state["p_note_pre"]      = r["note"]
-                st.session_state["purchase_items"]  = [{
-                    "name":       r["product_name"],
-                    "unit_price": float(r["unit_price"]),
-                    "quantity":   int(r["quantity"]),
-                }]
+            _key = f"{r['purchase_date']}||{r['supplier']}"
+            _groups.setdefault(_key, []).append(r)
+
+        for _gkey, _rows in _groups.items():
+            _first = _rows[0]
+            # グループヘッダー行（仕入日・取引先・商品数・修正ボタン）
+            hc1, hc2, hc3, hc4 = st.columns([2, 3, 2, 1])
+            hc1.markdown(f"**{_first['purchase_date']}**")
+            hc2.markdown(f"**{_first['supplier']}**")
+            hc3.caption(f"{len(_rows)} 商品")
+            if hc4.button("✏️ 修正", key=f"edit_g_{_gkey}"):
+                st.session_state["p_edit_page_ids"] = [r["page_id"] for r in _rows]
+                st.session_state["p_date_pre"]     = _first["purchase_date"]
+                st.session_state["p_supplier_pre"] = _first["supplier"]
+                st.session_state["p_tax_pre"]      = _first["tax_type"]
+                st.session_state["p_shipping_pre"] = float(_first["shipping"]) * len(_rows)
+                st.session_state["p_note_pre"]     = _first["note"]
+                st.session_state["purchase_items"] = [
+                    {"name": r["product_name"], "unit_price": float(r["unit_price"]), "quantity": int(r["quantity"])}
+                    for r in _rows
+                ]
                 st.rerun()
+            # 商品詳細（インデントして表示）
+            for r in _rows:
+                dc1, dc2, dc3 = st.columns([4, 2, 2])
+                dc1.caption(f"　{r['product_name']}")
+                dc2.caption(f"¥{r['total_unit_price']:.1f}")
+                dc3.caption(f"{r['quantity']}個")
+            st.markdown("---")
     else:
         st.caption("まだ仕入れ記録がありません。")
 
