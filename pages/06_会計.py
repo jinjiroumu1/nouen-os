@@ -230,7 +230,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
             with c1:
                 items[i]["name"] = st.text_input("商品名", value=item["name"], placeholder="例：A生樽20L", key=f"p_name_{_rev}_{i}")
             with c2:
-                items[i]["unit_price"] = st.number_input("商品単価（円）", value=float(item["unit_price"]), step=1.0, key=f"p_price_{_rev}_{i}")
+                items[i]["total_price"] = st.number_input("商品合計（円）", value=float(item.get("total_price", item.get("unit_price", 0.0))), step=1.0, key=f"p_price_{_rev}_{i}")
             with c3:
                 items[i]["quantity"] = st.number_input("仕入個数", value=int(item["quantity"]), min_value=1, step=1, key=f"p_qty_{_rev}_{i}")
             with c4:
@@ -239,35 +239,37 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                     st.rerun()
 
         if st.button("➕ 商品を追加", key=f"p_add_{_rev}"):
-            st.session_state.purchase_items.append({"name": "", "unit_price": 0.0, "quantity": 1})
+            st.session_state.purchase_items.append({"name": "", "total_price": 0.0, "quantity": 1})
             st.rerun()
 
         p_note = st.text_input("備考（任意）", key="p_note")
 
         # 計算プレビュー
         total_qty = sum(it["quantity"] for it in items)
-        # 計算ロジックを共通化
+        # 計算ロジック：商品合計÷個数で単価を逆算、そこに税・送料を加算
         def _calc(it):
-            base = it["unit_price"]
+            qty = it["quantity"] if it["quantity"] > 0 else 1
+            unit_price = it.get("total_price", it.get("unit_price", 0.0)) / qty
             if p_tax == "税別":
-                taxed_price = base * 1.08
+                taxed_price = unit_price * 1.08
                 ship_per_unit = (p_shipping * 1.10 / total_qty) if total_qty > 0 else 0
             else:
-                taxed_price = base
+                taxed_price = unit_price
                 ship_per_unit = (p_shipping / total_qty) if total_qty > 0 else 0
             total_unit = taxed_price + ship_per_unit
-            return taxed_price, ship_per_unit, total_unit
+            return unit_price, taxed_price, ship_per_unit, total_unit
 
         st.markdown("---")
         tax_note = "（単価×1.08、送料×1.10で按分）" if p_tax == "税別" else "（税込のまま按分）"
         st.markdown(f"**📊 計算プレビュー** {tax_note}")
         preview_rows = []
         for it in items:
-            taxed_price, ship_per_unit, total_unit = _calc(it)
+            unit_price, taxed_price, ship_per_unit, total_unit = _calc(it)
             preview_rows.append({
                 "商品名":           it["name"] or "（未入力）",
-                "単価（税込）":     f"¥{taxed_price:.1f}",
+                "商品合計":         f"¥{it.get('total_price', 0.0):.1f}",
                 "個数":             it["quantity"],
+                "逆算単価（税込）": f"¥{taxed_price:.1f}",
                 "1個あたり按分送料": f"¥{ship_per_unit:.1f}",
                 "商品単価合計":     f"¥{total_unit:.1f}",
             })
@@ -284,14 +286,14 @@ div[data-testid="stRadio"] label[data-checked="true"] {
             errors = []
             n_items = len(items)
             for idx, it in enumerate(items):
-                taxed_price, ship_per_unit, total_unit = _calc(it)
+                unit_price, taxed_price, ship_per_unit, total_unit = _calc(it)
                 if is_edit and idx < len(edit_page_ids):
                     ok, err_msg = update_purchase_record(
                         page_id          = edit_page_ids[idx],
                         purchase_date    = str(p_date),
                         supplier         = p_supplier,
                         product_name     = it["name"],
-                        unit_price       = it["unit_price"],
+                        unit_price       = round(unit_price, 1),
                         quantity         = it["quantity"],
                         shipping         = round(ship_per_unit, 1),
                         tax_type         = p_tax,
@@ -303,7 +305,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                         purchase_date    = str(p_date),
                         supplier         = p_supplier,
                         product_name     = it["name"],
-                        unit_price       = it["unit_price"],
+                        unit_price       = round(unit_price, 1),
                         quantity         = it["quantity"],
                         shipping         = round(ship_per_unit, 1),
                         tax_type         = p_tax,
@@ -347,7 +349,9 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                     st.session_state["p_shipping_pre"] = float(_first["shipping"]) * len(_rows)
                     st.session_state["p_note_pre"]     = _first["note"]
                     st.session_state["purchase_items"] = [
-                        {"name": r["product_name"], "unit_price": float(r["unit_price"]), "quantity": int(r["quantity"])}
+                        {"name": r["product_name"],
+                         "total_price": float(r["unit_price"]) * int(r["quantity"]),
+                         "quantity": int(r["quantity"])}
                         for r in _rows
                     ]
                     # リビジョンを上げてウィジェットキーを完全に切り替える
