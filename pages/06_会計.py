@@ -381,14 +381,24 @@ if reg_sub == "💴 決まった売値の登録":
         if _k not in st.session_state:
             st.session_state[_k] = ""
 
-    # アンカー（選択ボタン後のスクロール先）—— expanderより前に置く
-    st.markdown('<div id="dec-form-top"></div>', unsafe_allow_html=True)
+    # 選択後スクロール：見出しテキストで要素を探してscrollIntoView
     if _do_dec_scroll:
         _components.html("""<script>
-          setTimeout(function(){
-            var el = window.parent.document.getElementById('dec-form-top');
-            if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-          }, 300);
+          var attempts = 0;
+          function tryScroll() {
+            var doc = window.parent.document;
+            var found = null;
+            doc.querySelectorAll('h3, h2, [data-testid="stHeading"], [data-testid="stMarkdown"] p').forEach(function(el) {
+              if (!found && el.textContent.includes('決まった売値の登録')) found = el;
+            });
+            if (found) {
+              found.scrollIntoView({behavior: 'smooth', block: 'start'});
+            } else if (attempts < 10) {
+              attempts++;
+              setTimeout(tryScroll, 200);
+            }
+          }
+          setTimeout(tryScroll, 300);
         </script>""", height=0)
 
     # 仕入れ済み商品から選ぶ
