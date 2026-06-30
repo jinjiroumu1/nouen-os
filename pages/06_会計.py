@@ -158,7 +158,11 @@ div[data-testid="stRadio"] label[data-checked="true"] {
 
 if reg_sub == "🛒 仕入れを登録する":
     if st.session_state.pop("_scroll_top", False):
-        _components.html("<script>window.parent.document.querySelector('section.main').scrollTo(0,0);</script>", height=0)
+        _components.html("""<script>
+          var main = window.parent.document.querySelector('.main');
+          if(main) main.scrollTop = 0;
+          window.parent.scrollTo(0,0);
+        </script>""", height=0)
     st.subheader("🛒 仕入れを登録する")
     st.caption("仕入れた商品を記録します。送料・消費税を自動計算してNotionに保存します。")
 
@@ -214,21 +218,22 @@ if reg_sub == "🛒 仕入れを登録する":
     p_shipping = st.number_input("送料（円・任意）", min_value=0.0, step=10.0, key="p_shipping")
 
     st.markdown("**商品リスト**")
+    _rev = st.session_state.get("p_item_rev", 0)
     items = st.session_state.purchase_items
     for i, item in enumerate(items):
         c1, c2, c3, c4 = st.columns([4, 2, 2, 1])
         with c1:
-            items[i]["name"] = st.text_input("商品名", value=item["name"], key=f"p_name_{i}", placeholder="例：A生樽20L")
+            items[i]["name"] = st.text_input("商品名", value=item["name"], placeholder="例：A生樽20L", key=f"p_name_{_rev}_{i}")
         with c2:
-            items[i]["unit_price"] = st.number_input("商品単価（円）", value=float(item["unit_price"]), step=1.0, key=f"p_price_{i}")
+            items[i]["unit_price"] = st.number_input("商品単価（円）", value=float(item["unit_price"]), step=1.0, key=f"p_price_{_rev}_{i}")
         with c3:
-            items[i]["quantity"] = st.number_input("仕入個数", value=int(item["quantity"]), min_value=1, step=1, key=f"p_qty_{i}")
+            items[i]["quantity"] = st.number_input("仕入個数", value=int(item["quantity"]), min_value=1, step=1, key=f"p_qty_{_rev}_{i}")
         with c4:
-            if st.button("🗑️", key=f"p_del_{i}") and len(items) > 1:
+            if st.button("🗑️", key=f"p_del_{_rev}_{i}") and len(items) > 1:
                 st.session_state.purchase_items.pop(i)
                 st.rerun()
 
-    if st.button("➕ 商品を追加", key="p_add"):
+    if st.button("➕ 商品を追加", key=f"p_add_{_rev}"):
         st.session_state.purchase_items.append({"name": "", "unit_price": 0.0, "quantity": 1})
         st.rerun()
 
@@ -306,10 +311,8 @@ if reg_sub == "🛒 仕入れを登録する":
             st.error("保存失敗:\n" + "\n".join(errors))
         else:
             st.success("✅ 修正を保存しました！" if is_edit else f"✅ {n_items} 件の仕入れを保存しました！")
-            keys_to_delete = ["purchase_items", "p_date", "p_supplier", "p_tax", "p_shipping", "p_note", "p_edit_page_ids"]
-            for idx in range(n_items):
-                keys_to_delete += [f"p_name_{idx}", f"p_price_{idx}", f"p_qty_{idx}"]
-            for k in keys_to_delete:
+            for k in ["purchase_items", "p_date", "p_supplier", "p_tax", "p_shipping",
+                       "p_note", "p_edit_page_ids", "p_item_rev"]:
                 st.session_state.pop(k, None)
             st.rerun()
 
@@ -332,11 +335,6 @@ if reg_sub == "🛒 仕入れを登録する":
             hc2.markdown(f"**{_first['supplier']}**")
             hc3.caption(f"{len(_rows)} 商品")
             if hc4.button("✏️ 修正", key=f"edit_g_{_gkey}"):
-                # 古いウィジェットキーをすべて削除してから新データをセット
-                old_items = st.session_state.get("purchase_items", [])
-                for _i in range(len(old_items) + 10):
-                    for _k in (f"p_name_{_i}", f"p_price_{_i}", f"p_qty_{_i}"):
-                        st.session_state.pop(_k, None)
                 st.session_state["p_edit_page_ids"] = [r["page_id"] for r in _rows]
                 st.session_state["p_date_pre"]     = _first["purchase_date"]
                 st.session_state["p_supplier_pre"] = _first["supplier"]
@@ -347,6 +345,8 @@ if reg_sub == "🛒 仕入れを登録する":
                     {"name": r["product_name"], "unit_price": float(r["unit_price"]), "quantity": int(r["quantity"])}
                     for r in _rows
                 ]
+                # リビジョンを上げてウィジェットキーを完全に切り替える
+                st.session_state["p_item_rev"] = st.session_state.get("p_item_rev", 0) + 1
                 st.session_state["_scroll_top"] = True
                 st.rerun()
             # 商品詳細（インデントして表示）
