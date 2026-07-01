@@ -416,6 +416,21 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
     except Exception:
         pass
 
+    # 5. 仕入れ記録DB（直近30件）
+    purchase_text = ""
+    try:
+        from utils.notion_sync import load_purchase_records
+        purchase_records = load_purchase_records(limit=30)
+        if purchase_records:
+            lines = [
+                f"・{r['purchase_date']} {r['supplier']} {r['product_name']} "
+                f"送料込み商品単価¥{r['total_unit_price']:.1f} {r['quantity']}個"
+                for r in purchase_records
+            ]
+            purchase_text = "\n".join(lines)
+    except Exception:
+        pass
+
     system = f"""あなたは「AI勘ちゃん」——われまち農縁団の会計・原価管理アドバイザーです。
 
 【役割】
@@ -424,8 +439,11 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
 
 【参照データ】
 
-■ 【最優先】チームの決め事（売値・ルールなど確定した事項）
+■ 【最優先①】チームの決め事（売値・ルールなど確定した事項）
 {decisions_text if decisions_text else "（まだ登録されていません）"}
+
+■ 【最優先②】仕入れ記録（仕入日・取引先・商品名・送料込み商品単価・仕入個数）
+{purchase_text if purchase_text else "（まだ登録されていません）"}
 
 ■ スプレッドシート（売値・原価・仕入価格・粗利のデータ）
 {sheets_text[:3000] if sheets_text else "（未設定）"}
@@ -437,8 +455,9 @@ def get_ai_response_accounting(question: str, chat_history: list) -> str:
 {notion_log[:2500] if notion_log else "（記録なし）"}
 
 【回答のルール】
-- 「チームの決め事」に記載された内容は最優先で参照し、必ず回答に反映する
+- 「チームの決め事」と「仕入れ記録」は最優先で参照し、必ず回答に反映する
 - 決め事に記載された売値・ルールは確定事項として扱い、「〇〇の売値は△△円と決まっています」と明示する
+- 仕入れ記録から原価を読み取り、売値との差額・原価率を計算して示す
 - 数値データを具体的に引用して回答する
 - 原価率・利益率など計算が必要な場合は計算過程も示す
 - 納品書ファイル名から仕入れ先・商品・日付を読み取って回答に活用する
