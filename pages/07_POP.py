@@ -24,24 +24,31 @@ with tab_ask:
 
     st.subheader("📋 POP記録一覧")
 
-    # 検索フィルター
-    fc1, fc2, fc3 = st.columns([3, 3, 2])
-    with fc1:
-        q_name = st.text_input("商品名で検索", placeholder="例：しょうが")
-    with fc2:
-        q_keyword = st.text_input("キーワードで検索", placeholder="例：夏")
-    with fc3:
-        q_category = st.selectbox("区分で絞り込み",
-                                  ["すべて", "野菜", "農家", "値札", "イベント", "カフェメニュー"])
+    # 検索フィルター（ボタン押下時のみ絞り込み）
+    with st.form("pop_search_form"):
+        fc1, fc2, fc3, fc4 = st.columns([3, 3, 2, 1])
+        with fc1:
+            q_name = st.text_input("商品名", placeholder="例：しょうが")
+        with fc2:
+            q_keyword = st.text_input("キーワード", placeholder="例：夏")
+        with fc3:
+            q_category = st.selectbox("区分",
+                                      ["すべて", "野菜", "農家", "値札", "イベント", "カフェメニュー"])
+        with fc4:
+            st.markdown("<br>", unsafe_allow_html=True)
+            searched = st.form_submit_button("🔍 検索する")
 
-    # フィルタリング
-    results = pop_records
-    if q_name:
-        results = [r for r in results if q_name.lower() in r["product_name"].lower()]
-    if q_keyword:
-        results = [r for r in results if q_keyword.lower() in r["keyword"].lower()]
-    if q_category != "すべて":
-        results = [r for r in results if r["category"] == q_category]
+    # 初回（未検索）は全件表示、検索後は条件で絞り込み
+    if not searched:
+        results = pop_records
+    else:
+        results = pop_records
+        if q_name:
+            results = [r for r in results if q_name.lower() in r["product_name"].lower()]
+        if q_keyword:
+            results = [r for r in results if q_keyword.lower() in r["keyword"].lower()]
+        if q_category != "すべて":
+            results = [r for r in results if r["category"] == q_category]
 
     if not pop_records:
         st.info("POP記録がまだありません。「保存する」タブから登録してください。")
