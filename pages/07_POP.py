@@ -2,8 +2,8 @@ import base64
 import datetime
 import streamlit as st
 from pathlib import Path
-from utils.pop_loader import load_pop_files, upload_pop_file
-from utils.notion_sync import save_pop_log
+from utils.pop_loader import load_pop_files
+from utils.notion_sync import save_pop_log, save_pop_record
 from utils.ai_advisor import get_ai_response_chat
 
 POP_FOLDER_ID = "1M0ktbjZ9Wj_XuHo5kJAxO5pSciC3QLfp"
@@ -93,12 +93,13 @@ with tab_ask:
 
 # ── 保存するタブ ──────────────────────────────────────────
 with tab_save:
-    st.caption("POPデータをGoogle Driveに保存する")
+    st.caption("POPデータをNotionに保存する")
 
     with st.form("pop_upload_form", clear_on_submit=True):
         product_name = st.text_input("商品名", placeholder="例：しょうが")
         keyword      = st.text_input("キーワード", placeholder="例：夏　辛い　ジンジャー")
-        category     = st.selectbox("区分", ["野菜", "農家", "値札", "イベント", "カフェメニュー"])
+        category     = st.radio("区分", ["野菜", "農家", "値札", "イベント", "カフェメニュー"],
+                                horizontal=True)
         uploaded     = st.file_uploader("POPデータ（画像またはPDF）",
                                         type=["png", "jpg", "jpeg", "gif", "webp", "pdf"])
         submitted    = st.form_submit_button("💾 保存する")
@@ -109,14 +110,23 @@ with tab_save:
         elif not uploaded:
             st.error("ファイルをアップロードしてください。")
         else:
-            today = datetime.date.today().strftime("%Y%m%d")
-            ext   = uploaded.name.rsplit(".", 1)[-1]
-            fname = f"{category}_{product_name}_{keyword}_{today}.{ext}"
+            today  = datetime.date.today().strftime("%Y%m%d")
+            ext    = uploaded.name.rsplit(".", 1)[-1]
+            fname  = f"{category}_{product_name}_{keyword}_{today}.{ext}"
             file_bytes = uploaded.read()
-            with st.spinner("Google Driveに保存中…"):
-                ok, err = upload_pop_file(POP_FOLDER_ID, fname, file_bytes, uploaded.type)
+            with st.spinner("Notionに保存中…"):
+                ok, msg = save_pop_record(
+                    product_name=product_name,
+                    keyword=keyword,
+                    category=category,
+                    file_name=fname,
+                    file_bytes=file_bytes,
+                    mime_type=uploaded.type,
+                )
             if ok:
-                st.success(f"✅ 保存しました：{fname}")
-                st.cache_data.clear()
+                if msg:
+                    st.warning(f"⚠️ {msg}")
+                else:
+                    st.success(f"✅ 保存しました：{fname}")
             else:
-                st.error(f"保存に失敗しました：{err}")
+                st.error(f"保存に失敗しました：{msg}")

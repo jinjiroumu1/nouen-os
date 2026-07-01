@@ -595,3 +595,150 @@ def save_chat_log(question, answer, related_topics, source_type):
         )
     except Exception as e:
         st.warning(f"Notion同期エラー（チャット）: {e}")
+
+
+# ── POP記録DB ──────────────────────────────────────────────
+POP_RECORD_DB_ID = "38ba73ede49380a5beb6e30548302f30"  # POPページ子DB（初回は動的に取得・作成）
+
+def _get_or_create_pop_db(client) -> str:
+    """POPページ配下の「POP記録DB」のDB IDを返す。なければ作成する。"""
+    try:
+        blocks = client.blocks.children.list(block_id=POP_PAGE_ID, page_size=100)
+        for b in blocks.get("results", []):
+            if b.get("type") == "child_database":
+                title = b.get("child_database", {}).get("title", "")
+                if title == "POP記録DB":
+                    return b["id"].replace("-", "")
+    except Exception:
+        pass
+
+    # 見つからなければ作成
+    try:
+        db = client.databases.create(
+            parent={"type": "page_id", "page_id": POP_PAGE_ID},
+            title=[{"type": "text", "text": {"content": "POP記録DB"}}],
+            properties={
+                "商品名": {"title": {}},
+                "キーワード": {"rich_text": {}},
+                "区分": {"select": {"options": [
+                    {"name": "野菜",         "color": "green"},
+                    {"name": "農家",         "color": "orange"},
+                    {"name": "値札",         "color": "yellow"},
+                    {"name": "イベント",     "color": "pink"},
+                    {"name": "カフェメニュー", "color": "purple"},
+                ]}},
+                "登録日": {"date": {}},
+            },
+        )
+        return db["id"].replace("-", "")
+    except Exception as e:
+        raise RuntimeError(f"POP記録DB作成失敗: {e}")
+
+
+def _notion_upload_file(token: str, file_name: str, file_bytes: bytes, mime_type: str) -> str | None:
+    """
+    Notion File Upload API でファイルをアップロードし、file_upload_id を返す。
+    失敗時は None を返す。
+    """
+    import requests
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Notion-Version": "2022-06-28",
+    }
+
+    # 1. アップロードセッション作成
+    try:
+        res = requests.post(
+            "https://api.notion.com/v1/file_uploads",
+            headers=headers,
+            json={},
+            timeout=15,
+        )
+        if not res.ok:
+            return None
+        upload_id  = res.json()["id"]
+        upload_url = res.json()["upload_url"]
+    except Exception:
+        return None
+
+    # 2. ファイル送信
+    try:
+        res2 = requests.post(
+            upload_url,
+            headers={"Authorization": f"Bearer {token}", "Notion-Version": "2022-06-28"},
+            files={"file": (file_name, file_bytes, mime_type)},
+            timeout=60,
+        )
+        if not res2.ok:
+            return None
+    except Exception:
+        return None
+
+    return upload_id
+
+
+def save_pop_record(
+    product_name: str,
+    keyword: str,
+    category: str,
+    file_name: str,
+    file_bytes: bytes,
+    mime_type: str,
+) -> tuple[bool, str]:
+    """
+    POP記録DBにレコードを作成し、ファイルをページ本文に添付する。
+    返り値: (成功フラグ, エラーメッセージ)
+    """
+    import datetime as _dt
+
+    token = st.secrets.get("NOTION_TOKEN", "")
+    if not token:
+        return False, "NOTION_TOKEN が設定されていません"
+
+    client = _get_client()
+    if not client:
+        return False, "Notionクライアントの初期化に失敗しました"
+
+    try:
+        db_id = _get_or_create_pop_db(client)
+    except RuntimeError as e:
+        return False, str(e)
+
+    today = _dt.date.today().isoformat()
+
+    # DBレコード作成
+    try:
+        page = client.pages.create(
+            parent={"database_id": db_id},
+            properties={
+                "商品名":     _title(product_name),
+                "キーワード": _rich_text(keyword),
+                "区分":       _select(category),
+                "登録日":     _date(today),
+            },
+        )
+        page_id = page["id"]
+    except Exception as e:
+        return False, f"DBレコード作成失敗: {e}"
+
+    # ファイルアップロード（失敗してもDBレコードは保持）
+    if file_bytes:
+        upload_id = _notion_upload_file(token, file_name, file_bytes, mime_type)
+        if upload_id:
+            try:
+                client.blocks.children.append(
+                    block_id=page_id,
+                    children=[{
+                        "type": "file",
+                        "file": {
+                            "type": "file_upload",
+                            "file_upload": {"id": upload_id},
+                        },
+                    }],
+                )
+            except Exception:
+                # ファイルブロック追加失敗は警告のみ（レコードは保存済み）
+                return True, "レコードは保存しましたが、ファイルの添付に失敗しました"
+
+    return True, ""
