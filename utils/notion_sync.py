@@ -742,3 +742,53 @@ def save_pop_record(
                 return True, "レコードは保存しましたが、ファイルの添付に失敗しました"
 
     return True, ""
+
+
+def load_pop_records(limit: int = 50) -> list[dict]:
+    """
+    POP記録DB から全件取得して返す。
+    返り値: [{"page_id", "page_url", "product_name", "keyword", "category", "registered_date"}, ...]
+    """
+    client = _get_client()
+    if not client:
+        return []
+
+    try:
+        db_id = _get_or_create_pop_db(client)
+    except Exception:
+        return []
+
+    try:
+        res = client.databases.query(
+            database_id=db_id,
+            page_size=limit,
+            sorts=[{"timestamp": "created_time", "direction": "descending"}],
+        )
+        items = []
+        for page in res.get("results", []):
+            props = page.get("properties", {})
+
+            def _txt(key):
+                return "".join(r.get("plain_text", "") for r in props.get(key, {}).get("rich_text", []))
+
+            def _ttl(key):
+                return "".join(r.get("plain_text", "") for r in props.get(key, {}).get("title", []))
+
+            def _sel(key):
+                return (props.get(key, {}).get("select") or {}).get("name", "")
+
+            def _dt(key):
+                d = props.get(key, {}).get("date")
+                return d["start"] if d else ""
+
+            items.append({
+                "page_id":         page["id"],
+                "page_url":        page.get("url", ""),
+                "product_name":    _ttl("商品名"),
+                "keyword":         _txt("キーワード"),
+                "category":        _sel("区分"),
+                "registered_date": _dt("登録日"),
+            })
+        return items
+    except Exception:
+        return []

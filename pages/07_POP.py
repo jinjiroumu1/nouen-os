@@ -1,12 +1,8 @@
-import base64
 import datetime
 import streamlit as st
 from pathlib import Path
-from utils.pop_loader import load_pop_files
-from utils.notion_sync import save_pop_log, save_pop_record
+from utils.notion_sync import save_pop_log, save_pop_record, load_pop_records
 from utils.ai_advisor import get_ai_response_chat
-
-POP_FOLDER_ID = "1M0ktbjZ9Wj_XuHo5kJAxO5pSciC3QLfp"
 
 st.set_page_config(page_title="POP", page_icon="🪧", layout="wide")
 
@@ -20,45 +16,59 @@ tab_ask, tab_save = st.tabs(["💬 質問する", "💾 保存する"])
 
 # ── 質問するタブ ──────────────────────────────────────────
 with tab_ask:
-    st.caption("商品POPをGoogle Driveから検索・ダウンロードする")
+    st.caption("POP記録DBを検索し、AI勘ちゃんに質問する")
 
-    with st.spinner("Google DriveからPOPファイルを読み込み中…"):
-        files = load_pop_files(POP_FOLDER_ID)
+    # POP記録一覧
+    with st.spinner("POP記録を読み込み中…"):
+        pop_records = load_pop_records(limit=100)
 
-    if not files:
-        st.info(
-            "POPファイルが見つかりません。\n"
-            "Google Drive フォルダをサービスアカウントと共有してください。\n\n"
-            "サービスアカウント: `nouen-os-drive@electric-wave-500502-n2.iam.gserviceaccount.com`"
-        )
+    st.subheader("📋 POP記録一覧")
+
+    # 検索フィルター
+    fc1, fc2, fc3 = st.columns([3, 3, 2])
+    with fc1:
+        q_name = st.text_input("商品名で検索", placeholder="例：しょうが")
+    with fc2:
+        q_keyword = st.text_input("キーワードで検索", placeholder="例：夏")
+    with fc3:
+        q_category = st.selectbox("区分で絞り込み",
+                                  ["すべて", "野菜", "農家", "値札", "イベント", "カフェメニュー"])
+
+    # フィルタリング
+    results = pop_records
+    if q_name:
+        results = [r for r in results if q_name.lower() in r["product_name"].lower()]
+    if q_keyword:
+        results = [r for r in results if q_keyword.lower() in r["keyword"].lower()]
+    if q_category != "すべて":
+        results = [r for r in results if r["category"] == q_category]
+
+    if not pop_records:
+        st.info("POP記録がまだありません。「保存する」タブから登録してください。")
     else:
-        st.success(f"{len(files)} 件のPOPファイルを読み込みました")
-
-        query = st.text_input("🔍 商品名で検索", placeholder="例：しょうが　なす　ジンジャー")
-        results = [f for f in files if query.lower() in f["name"].lower()] if query else files
-
-        st.markdown(f"**{len(results)} 件**")
+        st.caption(f"{len(results)} 件 / 全 {len(pop_records)} 件")
         st.markdown("---")
 
-        for f in results:
-            col_name, col_dl = st.columns([5, 1])
-            with col_name:
-                if f["mime"].startswith("image/"):
-                    with st.expander(f"🖼️ {f['name']}"):
-                        img_bytes = base64.b64decode(f["data"])
-                        st.image(img_bytes, use_container_width=True)
-                else:
-                    st.markdown(f"📄 **{f['name']}**")
-            with col_dl:
-                st.download_button(
-                    label="⬇️",
-                    data=base64.b64decode(f["data"]),
-                    file_name=f["name"],
-                    mime=f["mime"],
-                    key=f"dl_{f['name']}",
-                )
+        # ヘッダー行
+        h1, h2, h3, h4, h5 = st.columns([3, 3, 2, 2, 1])
+        h1.caption("**商品名**")
+        h2.caption("**キーワード**")
+        h3.caption("**区分**")
+        h4.caption("**登録日**")
+        h5.caption("**リンク**")
+
+        for r in results:
+            c1, c2, c3, c4, c5 = st.columns([3, 3, 2, 2, 1])
+            c1.write(r["product_name"] or "—")
+            c2.write(r["keyword"] or "—")
+            c3.write(r["category"] or "—")
+            c4.write(r["registered_date"] or "—")
+            if r["page_url"]:
+                c5.markdown(f"[開く]({r['page_url']})")
 
     st.markdown("---")
+
+    # AI勘ちゃんチャット
     st.subheader("💬 AI勘ちゃんに質問する")
     st.caption("POPの文言・キャッチコピーのアイデアなど、何でも聞いてください。")
 
@@ -76,9 +86,21 @@ with tab_ask:
         with st.chat_message("user", avatar="👨‍🌾"):
             st.markdown(user_input)
 
+        # POP記録をコンテキストに追加
+        pop_context = ""
+        if pop_records:
+            lines = [
+                f"・{r['product_name']} [{r['category']}] キーワード:{r['keyword']} 登録日:{r['registered_date']}"
+                for r in pop_records[:30]
+            ]
+            pop_context = "\n".join(lines)
+
         with st.spinner("勘ちゃんが考えています…"):
             reply = get_ai_response_chat(
-                {"question": user_input, "related_topics": "POP・キャッチコピー"},
+                {
+                    "question": user_input,
+                    "related_topics": f"POP・キャッチコピー\n\n【登録済みPOP一覧】\n{pop_context}",
+                },
                 st.session_state.pop_chat[:-1],
             )
 
@@ -128,5 +150,6 @@ with tab_save:
                     st.warning(f"⚠️ {msg}")
                 else:
                     st.success(f"✅ 保存しました：{fname}")
+                    st.cache_data.clear()
             else:
                 st.error(f"保存に失敗しました：{msg}")
