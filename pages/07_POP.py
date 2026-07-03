@@ -129,8 +129,8 @@ with tab_save:
         keyword      = st.text_input("キーワード", placeholder="例：夏　辛い　ジンジャー")
         category     = st.radio("区分", ["野菜", "農家", "値札", "イベント", "カフェメニュー"],
                                 horizontal=True)
-        uploaded     = st.file_uploader("POPデータ（画像またはPDF）",
-                                        type=["png", "jpg", "jpeg", "gif", "webp", "pdf"])
+        uploaded     = st.file_uploader("POPデータ（画像・PDF・PPTX）",
+                                        type=["png", "jpg", "jpeg", "gif", "webp", "pdf", "pptx"])
         submitted    = st.form_submit_button("💾 保存する")
 
     if submitted:
@@ -153,10 +153,12 @@ with tab_save:
                     mime_type=uploaded.type,
                 )
             if ok:
-                if msg:
+                if msg and "失敗" in msg:
                     st.warning(f"⚠️ {msg}")
+                elif msg:
+                    st.success(f"✅ {msg}：{fname}")
                 else:
                     st.success(f"✅ 保存しました：{fname}")
-                    st.cache_data.clear()
+                st.cache_data.clear()
             else:
                 st.error(f"保存に失敗しました：{msg}")

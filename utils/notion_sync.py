@@ -678,6 +678,34 @@ def _notion_upload_file(token: str, file_name: str, file_bytes: bytes, mime_type
     return upload_id
 
 
+def _find_pop_page_by_name(client, db_id: str, product_name: str) -> str | None:
+    """商品名でPOP記録DBを検索し、既存ページIDを返す。なければNone。"""
+    try:
+        res = client.databases.query(
+            database_id=db_id,
+            filter={"property": "商品名", "title": {"equals": product_name}},
+            page_size=1,
+        )
+        results = res.get("results", [])
+        return results[0]["id"] if results else None
+    except Exception:
+        return None
+
+
+def _delete_file_blocks(client, page_id: str):
+    """ページ本文のファイルブロックをすべて削除する。"""
+    try:
+        blocks = client.blocks.children.list(block_id=page_id, page_size=100)
+        for b in blocks.get("results", []):
+            if b.get("type") == "file":
+                try:
+                    client.blocks.delete(block_id=b["id"])
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 def save_pop_record(
     product_name: str,
     keyword: str,
@@ -687,7 +715,7 @@ def save_pop_record(
     mime_type: str,
 ) -> tuple[bool, str]:
     """
-    POP記録DBにレコードを作成し、ファイルをページ本文に添付する。
+    POP記録DBにレコードを保存する。同名商品が存在する場合は上書き更新。
     返り値: (成功フラグ, エラーメッセージ)
     """
     import datetime as _dt
@@ -706,24 +734,35 @@ def save_pop_record(
         return False, str(e)
 
     today = _dt.date.today().isoformat()
+    props = {
+        "商品名":     _title(product_name),
+        "キーワード": _rich_text(keyword),
+        "区分":       _select(category),
+        "登録日":     _date(today),
+    }
 
-    # DBレコード作成
+    # 同名レコード検索：あれば上書き、なければ新規作成
+    existing_id = _find_pop_page_by_name(client, db_id, product_name)
     try:
-        page = client.pages.create(
-            parent={"database_id": db_id},
-            properties={
-                "商品名":     _title(product_name),
-                "キーワード": _rich_text(keyword),
-                "区分":       _select(category),
-                "登録日":     _date(today),
-            },
-        )
-        page_id = page["id"]
+        if existing_id:
+            client.pages.update(page_id=existing_id, properties=props)
+            page_id = existing_id
+            is_update = True
+        else:
+            page = client.pages.create(
+                parent={"database_id": db_id},
+                properties=props,
+            )
+            page_id = page["id"]
+            is_update = False
     except Exception as e:
-        return False, f"DBレコード作成失敗: {e}"
+        return False, f"{'更新' if existing_id else '作成'}失敗: {e}"
 
-    # ファイルアップロード（失敗してもDBレコードは保持）
+    # ファイルアップロード（上書き時は既存ファイルブロックを先に削除）
     if file_bytes:
+        if is_update:
+            _delete_file_blocks(client, page_id)
+
         upload_id = _notion_upload_file(token, file_name, file_bytes, mime_type)
         if upload_id:
             try:
@@ -738,10 +777,9 @@ def save_pop_record(
                     }],
                 )
             except Exception:
-                # ファイルブロック追加失敗は警告のみ（レコードは保存済み）
                 return True, "レコードは保存しましたが、ファイルの添付に失敗しました"
 
-    return True, ""
+    return True, "上書き更新しました" if is_update else ""
 
 
 def load_pop_records(limit: int = 50) -> list[dict]:
