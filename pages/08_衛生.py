@@ -70,12 +70,12 @@ items_sorted = sorted(items, key=_sort_key)
 
 # 集計バッジ
 expired  = [i for i in items_sorted if _sort_key(i) < today]
-warning  = [i for i in items_sorted if today <= _sort_key(i) <= today + timedelta(days=3)]
-safe     = [i for i in items_sorted if _sort_key(i) > today + timedelta(days=3)]
+warning  = [i for i in items_sorted if today <= _sort_key(i) <= today + timedelta(days=30)]
+safe     = [i for i in items_sorted if _sort_key(i) > today + timedelta(days=30)]
 
 c1, c2, c3 = st.columns(3)
 c1.metric("🔴 期限切れ", f"{len(expired)} 件")
-c2.metric("🟡 3日以内", f"{len(warning)} 件")
+c2.metric("🟡 1ヶ月以内", f"{len(warning)} 件")
 c3.metric("🟢 安全", f"{len(safe)} 件")
 
 st.markdown("---")
@@ -86,26 +86,29 @@ for item in items_sorted:
 
     if exp < today:
         icon  = "🔴"
-        label = f"**{abs(delta)}日超過**"
+        label = f"<b>{abs(delta)}日超過</b>"
         color = "#ffcccc"
-    elif delta <= 3:
+    elif delta <= 30:
         icon  = "🟡"
-        label = f"あと **{delta}日**"
+        label = f"あと <b>{delta}日</b>"
         color = "#fff8cc"
     else:
         icon  = "🟢"
         label = f"あと {delta}日"
         color = "#ccffcc"
 
+    exp_str  = item['expiry_date'][:10] if item['expiry_date'] else '不明'
+    qty_str  = f"📦 {item['quantity']}" if item['quantity'] else ""
+    loc_str  = f"📍 {item['storage_location']}" if item['storage_location'] else ""
+    note_str = f"📝 {item['note']}" if item['note'] else ""
+    extras   = "　".join(s for s in [qty_str, loc_str, note_str] if s)
+
     with st.container():
         st.markdown(
-            f"""<div style="background:{color};padding:10px 14px;border-radius:8px;margin-bottom:8px;">
-            {icon} <b>{item['product_name']}</b>
-            📅 {item['expiry_date'][:10] if item['expiry_date'] else '不明'}　{label}
-            {'📦 ' + item['quantity'] if item['quantity'] else ''}
-            {'📍 ' + item['storage_location'] if item['storage_location'] else ''}
-            {'📝 ' + item['note'] if item['note'] else ''}
-            </div>""",
+            f'<div style="background:{color};padding:10px 14px;border-radius:8px;margin-bottom:8px;">'
+            f'{icon} <b>{item["product_name"]}</b>　📅 {exp_str}　{label}'
+            f'{"　" + extras if extras else ""}'
+            f'</div>',
             unsafe_allow_html=True,
         )
         if st.button("削除", key=f"del_{item['id']}"):
