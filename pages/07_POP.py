@@ -124,12 +124,19 @@ with tab_ask:
 with tab_save:
     st.caption("POPデータをNotionに保存する")
 
+    # 「200MB per file」表示を非表示
+    st.markdown(
+        "<style>small.st-emotion-cache-7oyrr6, "
+        "[data-testid='stFileUploaderDropzoneInstructions'] small { display:none !important; }</style>",
+        unsafe_allow_html=True,
+    )
+
     with st.form("pop_upload_form", clear_on_submit=True):
         product_name = st.text_input("商品名", placeholder="例：しょうが")
         keyword      = st.text_input("キーワード", placeholder="例：夏　辛い　ジンジャー")
         category     = st.radio("区分", ["野菜", "農家", "値札", "イベント", "カフェメニュー"],
                                 horizontal=True)
-        uploaded     = st.file_uploader("POPデータ（画像・PDF・PPTX）",
+        uploaded     = st.file_uploader("POPデータ（画像・PDF・PPTX、5MB以内）",
                                         type=["png", "jpg", "jpeg", "gif", "webp", "pdf", "pptx"])
         submitted    = st.form_submit_button("💾 保存する")
 
@@ -138,6 +145,8 @@ with tab_save:
             st.error("商品名を入力してください。")
         elif not uploaded:
             st.error("ファイルをアップロードしてください。")
+        elif uploaded.size > 5 * 1024 * 1024:
+            st.error("ファイルサイズが5MBを超えています。5MB以内のファイルを選択してください。")
         else:
             today  = datetime.date.today().strftime("%Y%m%d")
             ext    = uploaded.name.rsplit(".", 1)[-1]
