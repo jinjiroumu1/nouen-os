@@ -415,6 +415,8 @@ div[data-testid="stRadio"] label[data-checked="true"] {
         dec_qty   = st.text_input("量",          key="dec_qty",   placeholder="例：1個、1kg、1箱")
         dec_price = st.text_input("売値（円）",   key="dec_price", placeholder="例：500円")
         dec_note  = st.text_input("備考（任意）", key="dec_note",  placeholder="例：パンダ広場・いきいき共通")
+        import datetime as _dt_dec
+        dec_date  = st.date_input("決定日", value=_dt_dec.date.today(), key="dec_date")
 
         dec_edit_page_id = st.session_state.get("dec_edit_page_id")
         if dec_edit_page_id:
@@ -425,7 +427,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                 if dec_edit_page_id:
                     ok = update_accounting_decision(dec_edit_page_id, dec_item, dec_qty, dec_price, dec_note)
                 else:
-                    ok = save_accounting_decision(dec_item, "🏷️ 売値", dec_qty, dec_price, dec_note)
+                    ok = save_accounting_decision(dec_item, "🏷️ 売値", dec_qty, dec_price, dec_note, str(dec_date))
                 if ok:
                     st.success("✅ 修正を保存しました！" if dec_edit_page_id else "✅ 決め事を保存しました！")
                     for k in ("dec_item", "dec_qty", "dec_price", "dec_note", "dec_edit_page_id"):

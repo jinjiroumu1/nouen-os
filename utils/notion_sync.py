@@ -177,13 +177,13 @@ _DECISIONS_PROPS_EXTRA = {
 DECISIONS_DB_ID = "38ea73ede4938132956fcdbed01c0f5f"
 
 
-def save_accounting_decision(item_name: str, category: str, quantity: str, price: str, note: str) -> bool:
-    """会計決め事をDBに保存する。成功時True。"""
+def save_accounting_decision(item_name: str, category: str, quantity: str, price: str, note: str, decision_date: str = "") -> bool:
+    """会計決め事をDBに保存する。成功時True。decision_date は YYYY-MM-DD 形式（省略時は今日）。"""
     client = _get_client()
     if not client:
         return False
     try:
-        now = datetime.now(timezone.utc).isoformat()
+        date_val = decision_date if decision_date else datetime.now(timezone.utc).date().isoformat()
         client.pages.create(
             parent={"database_id": DECISIONS_DB_ID},
             properties={
@@ -192,7 +192,7 @@ def save_accounting_decision(item_name: str, category: str, quantity: str, price
                 "量":       _rich_text(quantity),
                 "金額":     _rich_text(price),
                 "備考":     _rich_text(note),
-                "日時":     _date(now),
+                "日時":     _date(date_val),
             },
         )
         return True
