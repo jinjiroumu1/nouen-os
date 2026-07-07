@@ -4,26 +4,37 @@ from db.database import init_db
 
 init_db()
 
-# ── Google OAuth コールバック処理（リダイレクトURIがベースURLのため app.py で受け取る） ──
+# ── Google OAuth コールバック処理（PKCEなし・requests直接呼び出し） ──────
 _params = st.query_params
 if "code" in _params and "google_oauth_creds" not in st.session_state:
+    import json as _json, requests as _req
     try:
-        # 07_POP.py で生成・保存したflowオブジェクトを使い回す（code_verifier一致のため）
-        _flow = st.session_state.get("_gdrive_flow")
-        if _flow is None:
-            st.error("認証フローが見つかりません。もう一度「Googleアカウントで認証する」を押してください。")
-        else:
-            _flow.fetch_token(code=_params["code"])
-            _creds = _flow.credentials
+        _raw = st.secrets.get("GOOGLE_OAUTH_JSON", "")
+        if _raw:
+            _config   = _json.loads(_raw)
+            _app_type = "web" if "web" in _config else "installed"
+            _info     = _config[_app_type]
+            _resp = _req.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code":          _params["code"],
+                    "client_id":     _info["client_id"],
+                    "client_secret": _info["client_secret"],
+                    "redirect_uri":  _info["redirect_uris"][0],
+                    "grant_type":    "authorization_code",
+                },
+                timeout=15,
+            )
+            _resp.raise_for_status()
+            _tok = _resp.json()
             st.session_state["google_oauth_creds"] = {
-                "token":         _creds.token,
-                "refresh_token": _creds.refresh_token,
-                "token_uri":     _creds.token_uri,
-                "client_id":     _creds.client_id,
-                "client_secret": _creds.client_secret,
-                "scopes":        list(_creds.scopes) if _creds.scopes else [],
+                "token":         _tok["access_token"],
+                "refresh_token": _tok.get("refresh_token"),
+                "token_uri":     "https://oauth2.googleapis.com/token",
+                "client_id":     _info["client_id"],
+                "client_secret": _info["client_secret"],
+                "scopes":        _tok.get("scope", "").split(),
             }
-            st.session_state.pop("_gdrive_flow", None)
             st.query_params.clear()
             st.switch_page("pages/07_POP.py")
     except Exception as _e:

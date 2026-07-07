@@ -18,19 +18,34 @@ if _img.exists():
 st.title("🪧 POP")
 
 
-# ── Google OAuth ヘルパー ──────────────────────────────────
-def _make_flow(redirect_uri: str = None):
-    oauth_json = st.secrets.get("GOOGLE_OAUTH_JSON", "")
-    if not oauth_json:
+# ── Google OAuth ヘルパー（PKCEなし・直接URLビルド方式） ──
+def _oauth_config():
+    """GOOGLE_OAUTH_JSON から client_id / client_secret / redirect_uri を取得する。"""
+    raw = st.secrets.get("GOOGLE_OAUTH_JSON", "")
+    if not raw:
         return None
-    try:
-        from google_auth_oauthlib.flow import Flow
-        config = json.loads(oauth_json)
-        app_type = "web" if "web" in config else "installed"
-        ru = redirect_uri or config[app_type]["redirect_uris"][0]
-        return Flow.from_client_config(config, scopes=DRIVE_SCOPES, redirect_uri=ru)
-    except Exception:
-        return None
+    config = json.loads(raw)
+    app_type = "web" if "web" in config else "installed"
+    info = config[app_type]
+    return {
+        "client_id":     info["client_id"],
+        "client_secret": info["client_secret"],
+        "redirect_uri":  info["redirect_uris"][0],
+    }
+
+
+def _build_auth_url(cfg: dict) -> str:
+    """PKCEなし・stateなしのシンプルな認証URLを構築する。"""
+    import urllib.parse
+    params = {
+        "client_id":     cfg["client_id"],
+        "redirect_uri":  cfg["redirect_uri"],
+        "response_type": "code",
+        "scope":         " ".join(DRIVE_SCOPES),
+        "access_type":   "offline",
+        "prompt":        "consent",
+    }
+    return "https://accounts.google.com/o/oauth2/auth?" + urllib.parse.urlencode(params)
 
 
 def _get_drive_service():
@@ -186,14 +201,11 @@ with tab_save:
         st.success("✅ Googleドライブに接続済み")
         if st.button("🔓 ログアウト", key="gdrive_logout"):
             st.session_state.pop("google_oauth_creds", None)
-            st.session_state.pop("_gdrive_flow", None)
             st.rerun()
     else:
-        _flow = _make_flow()
-        if _flow:
-            # 同じflowオブジェクトをsession_stateに保存（app.pyでトークン取得時に使い回す）
-            _auth_url, _ = _flow.authorization_url(prompt="consent", access_type="offline")
-            st.session_state["_gdrive_flow"] = _flow
+        _cfg = _oauth_config()
+        if _cfg:
+            _auth_url = _build_auth_url(_cfg)
             st.info("Googleドライブへのアップロードには認証が必要です。")
             st.link_button("🔑 Googleアカウントで認証する", _auth_url)
         else:
