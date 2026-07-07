@@ -1,8 +1,13 @@
 import datetime
+import io
+import json
 import streamlit as st
 from pathlib import Path
 from utils.notion_sync import save_pop_log, save_pop_record, load_pop_records
 from utils.ai_advisor import get_ai_response_chat
+
+POP_DRIVE_FOLDER_ID = "1M0ktbjZ9Wj_XuHo5kJAxO5pSciC3QLfp"
+DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
 st.set_page_config(page_title="POP", page_icon="🪧", layout="wide")
 
@@ -12,19 +17,89 @@ if _img.exists():
 
 st.title("🪧 POP")
 
+
+# ── Google OAuth ヘルパー ──────────────────────────────────
+def _make_flow(redirect_uri: str = None):
+    oauth_json = st.secrets.get("GOOGLE_OAUTH_JSON", "")
+    if not oauth_json:
+        return None
+    try:
+        from google_auth_oauthlib.flow import Flow
+        config = json.loads(oauth_json)
+        app_type = "web" if "web" in config else "installed"
+        ru = redirect_uri or config[app_type]["redirect_uris"][0]
+        return Flow.from_client_config(config, scopes=DRIVE_SCOPES, redirect_uri=ru)
+    except Exception:
+        return None
+
+
+def _get_drive_service():
+    creds_dict = st.session_state.get("google_oauth_creds")
+    if not creds_dict:
+        return None
+    try:
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        creds = Credentials(
+            token=creds_dict["token"],
+            refresh_token=creds_dict.get("refresh_token"),
+            token_uri=creds_dict.get("token_uri", "https://oauth2.googleapis.com/token"),
+            client_id=creds_dict["client_id"],
+            client_secret=creds_dict["client_secret"],
+            scopes=creds_dict.get("scopes"),
+        )
+        return build("drive", "v3", credentials=creds)
+    except Exception:
+        return None
+
+
+def _upload_to_drive(file_name: str, file_bytes: bytes, mime_type: str) -> tuple[bool, str]:
+    service = _get_drive_service()
+    if not service:
+        return False, "Googleドライブに未認証です"
+    try:
+        from googleapiclient.http import MediaIoBaseUpload
+        metadata = {"name": file_name, "parents": [POP_DRIVE_FOLDER_ID]}
+        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=True)
+        service.files().create(body=metadata, media_body=media, fields="id").execute()
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+# ── OAuthコールバック処理（タブ外で最初に処理） ────────────
+_params = st.query_params
+if "code" in _params and "google_oauth_creds" not in st.session_state:
+    _flow = _make_flow()
+    if _flow:
+        try:
+            _flow.fetch_token(code=_params["code"])
+            _creds = _flow.credentials
+            st.session_state["google_oauth_creds"] = {
+                "token":         _creds.token,
+                "refresh_token": _creds.refresh_token,
+                "token_uri":     _creds.token_uri,
+                "client_id":     _creds.client_id,
+                "client_secret": _creds.client_secret,
+                "scopes":        list(_creds.scopes) if _creds.scopes else [],
+            }
+            st.query_params.clear()
+            st.rerun()
+        except Exception as e:
+            st.error(f"Google認証エラー: {e}")
+
+
 tab_ask, tab_save = st.tabs(["💬 質問する", "💾 保存する"])
 
 # ── 質問するタブ ──────────────────────────────────────────
 with tab_ask:
     st.caption("POP記録DBを検索し、AI勘ちゃんに質問する")
 
-    # POP記録一覧
     with st.spinner("POP記録を読み込み中…"):
         pop_records = load_pop_records(limit=100)
 
     st.subheader("📋 POP記録一覧")
 
-    # 検索フィルター（ボタン押下時のみ絞り込み）
     with st.form("pop_search_form"):
         fc1, fc2, fc3, fc4 = st.columns([3, 3, 2, 1])
         with fc1:
@@ -38,7 +113,6 @@ with tab_ask:
             st.markdown("<br>", unsafe_allow_html=True)
             searched = st.form_submit_button("🔍 検索する")
 
-    # 初回（未検索）は全件表示、検索後は条件で絞り込み
     if not searched:
         results = pop_records
     else:
@@ -56,7 +130,6 @@ with tab_ask:
         st.caption(f"{len(results)} 件 / 全 {len(pop_records)} 件")
         st.markdown("---")
 
-        # ヘッダー行
         h1, h2, h3, h4, h5 = st.columns([3, 3, 2, 2, 1])
         h1.caption("**商品名**")
         h2.caption("**キーワード**")
@@ -75,7 +148,6 @@ with tab_ask:
 
     st.markdown("---")
 
-    # AI勘ちゃんチャット
     st.subheader("💬 AI勘ちゃんに質問する")
     st.caption("POPの文言・キャッチコピーのアイデアなど、何でも聞いてください。")
 
@@ -93,7 +165,6 @@ with tab_ask:
         with st.chat_message("user", avatar="👨‍🌾"):
             st.markdown(user_input)
 
-        # POP記録をコンテキストに追加
         pop_context = ""
         if pop_records:
             lines = [
@@ -122,7 +193,7 @@ with tab_ask:
 
 # ── 保存するタブ ──────────────────────────────────────────
 with tab_save:
-    st.caption("POPデータをNotionに保存する")
+    st.caption("POPデータをGoogleドライブ＋Notionに保存する")
 
     # 「200MB per file」表示を非表示
     st.markdown(
@@ -131,43 +202,68 @@ with tab_save:
         unsafe_allow_html=True,
     )
 
+    # ── Google認証状態の表示・認証ボタン ──────────────────
+    is_authenticated = "google_oauth_creds" in st.session_state
+    if is_authenticated:
+        st.success("✅ Googleドライブに接続済み")
+        if st.button("🔓 ログアウト", key="gdrive_logout"):
+            st.session_state.pop("google_oauth_creds", None)
+            st.rerun()
+    else:
+        _flow = _make_flow()
+        if _flow:
+            _auth_url, _ = _flow.authorization_url(prompt="consent", access_type="offline")
+            st.info("Googleドライブへのアップロードには認証が必要です。")
+            st.link_button("🔑 Googleアカウントで認証する", _auth_url)
+        else:
+            st.warning("GOOGLE_OAUTH_JSON が設定されていません。")
+
+    st.markdown("---")
+
     with st.form("pop_upload_form", clear_on_submit=True):
         product_name = st.text_input("商品名", placeholder="例：しょうが")
         keyword      = st.text_input("キーワード", placeholder="例：夏　辛い　ジンジャー")
         category     = st.radio("区分", ["野菜", "農家", "値札", "イベント", "カフェメニュー"],
                                 horizontal=True)
-        uploaded     = st.file_uploader("POPデータ（画像・PDF・PPTX、5MB以内）",
+        uploaded     = st.file_uploader("POPデータ（画像・PDF・PPTX）",
                                         type=["png", "jpg", "jpeg", "gif", "webp", "pdf", "pptx"])
-        submitted    = st.form_submit_button("💾 保存する")
+        submitted    = st.form_submit_button("💾 保存する", disabled=not is_authenticated)
 
     if submitted:
         if not product_name:
             st.error("商品名を入力してください。")
         elif not uploaded:
             st.error("ファイルをアップロードしてください。")
-        elif uploaded.size > 5 * 1024 * 1024:
-            st.error("ファイルサイズが5MBを超えています。5MB以内のファイルを選択してください。")
         else:
-            today  = datetime.date.today().strftime("%Y%m%d")
-            ext    = uploaded.name.rsplit(".", 1)[-1]
-            fname  = f"{category}_{product_name}_{keyword}_{today}.{ext}"
+            today      = datetime.date.today().strftime("%Y%m%d")
+            ext        = uploaded.name.rsplit(".", 1)[-1]
+            fname      = f"{category}_{product_name}_{keyword}_{today}.{ext}"
             file_bytes = uploaded.read()
-            with st.spinner("Notionに保存中…"):
-                ok, msg = save_pop_record(
-                    product_name=product_name,
-                    keyword=keyword,
-                    category=category,
-                    file_name=fname,
-                    file_bytes=file_bytes,
-                    mime_type=uploaded.type,
-                )
-            if ok:
-                if msg and "失敗" in msg:
-                    st.warning(f"⚠️ {msg}")
-                elif msg:
-                    st.success(f"✅ {msg}：{fname}")
-                else:
-                    st.success(f"✅ 保存しました：{fname}")
-                st.cache_data.clear()
+
+            # 1. Google Driveにアップロード
+            with st.spinner("Googleドライブにアップロード中…"):
+                drive_ok, drive_err = _upload_to_drive(fname, file_bytes, uploaded.type)
+
+            if not drive_ok:
+                st.error(f"Driveへのアップロードに失敗しました：{drive_err}")
             else:
-                st.error(f"保存に失敗しました：{msg}")
+                # 2. Notionにメタデータ保存（ファイルはDriveに保存済みのためNoneで渡す）
+                with st.spinner("Notionにメタデータを保存中…"):
+                    ok, msg = save_pop_record(
+                        product_name=product_name,
+                        keyword=keyword,
+                        category=category,
+                        file_name=fname,
+                        file_bytes=None,
+                        mime_type=uploaded.type,
+                    )
+                if ok:
+                    if msg and "失敗" in msg:
+                        st.warning(f"⚠️ Driveへの保存は完了しました。Notionの記録に問題：{msg}")
+                    elif msg:
+                        st.success(f"✅ {msg}（Drive＋Notion）：{fname}")
+                    else:
+                        st.success(f"✅ 保存しました（Drive＋Notion）：{fname}")
+                    st.cache_data.clear()
+                else:
+                    st.warning(f"⚠️ Driveへの保存は完了しました。Notionの記録に失敗：{msg}")
