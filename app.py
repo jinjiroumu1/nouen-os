@@ -7,18 +7,14 @@ init_db()
 # ── Google OAuth コールバック処理（リダイレクトURIがベースURLのため app.py で受け取る） ──
 _params = st.query_params
 if "code" in _params and "google_oauth_creds" not in st.session_state:
-    import json
     try:
-        from google_auth_oauthlib.flow import Flow
-        _oauth_json = st.secrets.get("GOOGLE_OAUTH_JSON", "")
-        if _oauth_json:
-            _config    = json.loads(_oauth_json)
-            _app_type  = "web" if "web" in _config else "installed"
-            _ru        = _config[_app_type]["redirect_uris"][0]
-            _scopes    = ["https://www.googleapis.com/auth/drive.file"]
-            _flow      = Flow.from_client_config(_config, scopes=_scopes, redirect_uri=_ru)
+        # 07_POP.py で生成・保存したflowオブジェクトを使い回す（code_verifier一致のため）
+        _flow = st.session_state.get("_gdrive_flow")
+        if _flow is None:
+            st.error("認証フローが見つかりません。もう一度「Googleアカウントで認証する」を押してください。")
+        else:
             _flow.fetch_token(code=_params["code"])
-            _creds     = _flow.credentials
+            _creds = _flow.credentials
             st.session_state["google_oauth_creds"] = {
                 "token":         _creds.token,
                 "refresh_token": _creds.refresh_token,
@@ -27,6 +23,7 @@ if "code" in _params and "google_oauth_creds" not in st.session_state:
                 "client_secret": _creds.client_secret,
                 "scopes":        list(_creds.scopes) if _creds.scopes else [],
             }
+            st.session_state.pop("_gdrive_flow", None)
             st.query_params.clear()
             st.switch_page("pages/07_POP.py")
     except Exception as _e:

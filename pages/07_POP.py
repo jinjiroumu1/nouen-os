@@ -186,11 +186,14 @@ with tab_save:
         st.success("✅ Googleドライブに接続済み")
         if st.button("🔓 ログアウト", key="gdrive_logout"):
             st.session_state.pop("google_oauth_creds", None)
+            st.session_state.pop("_gdrive_flow", None)
             st.rerun()
     else:
         _flow = _make_flow()
         if _flow:
+            # 同じflowオブジェクトをsession_stateに保存（app.pyでトークン取得時に使い回す）
             _auth_url, _ = _flow.authorization_url(prompt="consent", access_type="offline")
+            st.session_state["_gdrive_flow"] = _flow
             st.info("Googleドライブへのアップロードには認証が必要です。")
             st.link_button("🔑 Googleアカウントで認証する", _auth_url)
         else:
