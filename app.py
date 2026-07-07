@@ -4,6 +4,34 @@ from db.database import init_db
 
 init_db()
 
+# ── Google OAuth コールバック処理（リダイレクトURIがベースURLのため app.py で受け取る） ──
+_params = st.query_params
+if "code" in _params and "google_oauth_creds" not in st.session_state:
+    import json
+    try:
+        from google_auth_oauthlib.flow import Flow
+        _oauth_json = st.secrets.get("GOOGLE_OAUTH_JSON", "")
+        if _oauth_json:
+            _config    = json.loads(_oauth_json)
+            _app_type  = "web" if "web" in _config else "installed"
+            _ru        = _config[_app_type]["redirect_uris"][0]
+            _scopes    = ["https://www.googleapis.com/auth/drive.file"]
+            _flow      = Flow.from_client_config(_config, scopes=_scopes, redirect_uri=_ru)
+            _flow.fetch_token(code=_params["code"])
+            _creds     = _flow.credentials
+            st.session_state["google_oauth_creds"] = {
+                "token":         _creds.token,
+                "refresh_token": _creds.refresh_token,
+                "token_uri":     _creds.token_uri,
+                "client_id":     _creds.client_id,
+                "client_secret": _creds.client_secret,
+                "scopes":        list(_creds.scopes) if _creds.scopes else [],
+            }
+            st.query_params.clear()
+            st.switch_page("pages/07_POP.py")
+    except Exception as _e:
+        st.error(f"Google認証エラー: {_e}")
+
 st.set_page_config(
     page_title="田心ジンジャー",
     page_icon="🫚",

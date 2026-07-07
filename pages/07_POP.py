@@ -67,28 +67,6 @@ def _upload_to_drive(file_name: str, file_bytes: bytes, mime_type: str) -> tuple
         return False, str(e)
 
 
-# ── OAuthコールバック処理（タブ外で最初に処理） ────────────
-_params = st.query_params
-if "code" in _params and "google_oauth_creds" not in st.session_state:
-    _flow = _make_flow()
-    if _flow:
-        try:
-            _flow.fetch_token(code=_params["code"])
-            _creds = _flow.credentials
-            st.session_state["google_oauth_creds"] = {
-                "token":         _creds.token,
-                "refresh_token": _creds.refresh_token,
-                "token_uri":     _creds.token_uri,
-                "client_id":     _creds.client_id,
-                "client_secret": _creds.client_secret,
-                "scopes":        list(_creds.scopes) if _creds.scopes else [],
-            }
-            st.query_params.clear()
-            st.rerun()
-        except Exception as e:
-            st.error(f"Google認証エラー: {e}")
-
-
 tab_ask, tab_save = st.tabs(["💬 質問する", "💾 保存する"])
 
 # ── 質問するタブ ──────────────────────────────────────────
