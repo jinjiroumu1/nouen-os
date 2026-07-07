@@ -13,6 +13,7 @@ ACCOUNTING_PAGE_ID           = "388a73ede493800ea5fdd751647cba5d"
 ACCOUNTING_DECISIONS_PAGE_ID = "644a9f42d1d74165bc1a1b75ab954766"
 POP_PAGE_ID                  = "38ba73ede49380a5beb6e30548302f30"
 HYGIENE_PAGE_ID              = "38ba73ede49380bbb4befb5d70db6726"
+KENJIN_PAGE_ID               = "388a73ede4938018af0ddf46812b076d"
 
 SOURCE_TYPE_LABEL = {
     "souhatsuchi": "🌸創発知",
@@ -830,3 +831,92 @@ def load_pop_records(limit: int = 50) -> list[dict]:
         return items
     except Exception:
         return []
+
+
+# ── OAuth Token DB ─────────────────────────────────────────
+def _get_or_create_oauth_db(client) -> str:
+    """賢人コーナーページ配下の「OAuth Token DB」のDB IDを返す。なければ作成する。"""
+    try:
+        blocks = client.blocks.children.list(block_id=KENJIN_PAGE_ID, page_size=100)
+        for b in blocks.get("results", []):
+            if b.get("type") == "child_database":
+                if b.get("child_database", {}).get("title", "") == "OAuth Token DB":
+                    return b["id"].replace("-", "")
+    except Exception:
+        pass
+    try:
+        db = client.databases.create(
+            parent={"type": "page_id", "page_id": KENJIN_PAGE_ID},
+            title=[{"type": "text", "text": {"content": "OAuth Token DB"}}],
+            properties={
+                "service":       {"title": {}},
+                "access_token":  {"rich_text": {}},
+                "refresh_token": {"rich_text": {}},
+                "expiry":        {"rich_text": {}},
+            },
+        )
+        return db["id"].replace("-", "")
+    except Exception as e:
+        raise RuntimeError(f"OAuth Token DB作成失敗: {e}")
+
+
+def save_oauth_token(service: str, access_token: str, refresh_token: str, expiry: str) -> bool:
+    """
+    OAuthトークンをNotion OAuth Token DBに保存（upsert）する。
+    同じservice名のレコードが存在すれば更新、なければ新規作成。
+    """
+    client = _get_client()
+    if not client:
+        return False
+    try:
+        db_id = _get_or_create_oauth_db(client)
+        # 既存レコード検索
+        res = client.databases.query(
+            database_id=db_id,
+            filter={"property": "service", "title": {"equals": service}},
+            page_size=1,
+        )
+        props = {
+            "service":       _title(service),
+            "access_token":  _rich_text(access_token[:2000]),
+            "refresh_token": _rich_text(refresh_token or ""),
+            "expiry":        _rich_text(expiry),
+        }
+        existing = res.get("results", [])
+        if existing:
+            client.pages.update(page_id=existing[0]["id"], properties=props)
+        else:
+            client.pages.create(parent={"database_id": db_id}, properties=props)
+        return True
+    except Exception:
+        return False
+
+
+def load_oauth_token(service: str) -> dict | None:
+    """
+    Notion OAuth Token DB から指定サービスのトークンを読み込む。
+    返り値: {"access_token", "refresh_token", "expiry"} or None
+    """
+    client = _get_client()
+    if not client:
+        return None
+    try:
+        db_id = _get_or_create_oauth_db(client)
+        res = client.databases.query(
+            database_id=db_id,
+            filter={"property": "service", "title": {"equals": service}},
+            page_size=1,
+        )
+        results = res.get("results", [])
+        if not results:
+            return None
+        props = results[0].get("properties", {})
+        def _txt(key):
+            return "".join(r.get("plain_text", "") for r in props.get(key, {}).get("rich_text", []))
+        return {
+            "access_token":  _txt("access_token"),
+            "refresh_token": _txt("refresh_token"),
+            "expiry":        _txt("expiry"),
+        }
+    except Exception:
+        return None

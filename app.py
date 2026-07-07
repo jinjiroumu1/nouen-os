@@ -1,5 +1,6 @@
 import streamlit as st
 from pathlib import Path
+from datetime import datetime, timezone
 from db.database import init_db
 
 init_db()
@@ -27,7 +28,13 @@ if "code" in _params and "google_oauth_creds" not in st.session_state:
             )
             _resp.raise_for_status()
             _tok = _resp.json()
-            st.session_state["google_oauth_creds"] = {
+            # expiry計算（expires_in秒後のISO文字列）
+            import time as _time
+            _expires_in = _tok.get("expires_in", 3600)
+            _expiry = datetime.fromtimestamp(
+                _time.time() + _expires_in, tz=timezone.utc
+            ).isoformat()
+            _creds_dict = {
                 "token":         _tok["access_token"],
                 "refresh_token": _tok.get("refresh_token"),
                 "token_uri":     "https://oauth2.googleapis.com/token",
@@ -35,6 +42,15 @@ if "code" in _params and "google_oauth_creds" not in st.session_state:
                 "client_secret": _info["client_secret"],
                 "scopes":        _tok.get("scope", "").split(),
             }
+            st.session_state["google_oauth_creds"] = _creds_dict
+            # Notionにトークンを永続化
+            from utils.notion_sync import save_oauth_token as _save_tok
+            _save_tok(
+                service="gdrive",
+                access_token=_tok["access_token"],
+                refresh_token=_tok.get("refresh_token", ""),
+                expiry=_expiry,
+            )
             st.query_params.clear()
             st.switch_page("pages/07_POP.py")
     except Exception as _e:

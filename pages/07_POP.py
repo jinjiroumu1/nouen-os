@@ -3,7 +3,8 @@ import io
 import json
 import streamlit as st
 from pathlib import Path
-from utils.notion_sync import save_pop_log, save_pop_record, load_pop_records
+from utils.notion_sync import save_pop_log, save_pop_record, load_pop_records, \
+    save_oauth_token, load_oauth_token
 from utils.ai_advisor import get_ai_response_chat
 
 POP_DRIVE_FOLDER_ID = "1M0ktbjZ9Wj_XuHo5kJAxO5pSciC3QLfp"
@@ -48,6 +49,83 @@ def _build_auth_url(cfg: dict) -> str:
     return "https://accounts.google.com/o/oauth2/auth?" + urllib.parse.urlencode(params)
 
 
+def _refresh_access_token(cfg: dict, refresh_token: str) -> dict | None:
+    """refresh_token で新しい access_token を取得して返す。失敗時は None。"""
+    import requests as _req
+    try:
+        resp = _req.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id":     cfg["client_id"],
+                "client_secret": cfg["client_secret"],
+                "refresh_token": refresh_token,
+                "grant_type":    "refresh_token",
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
+def _load_and_restore_token():
+    """
+    Notionからトークンを読み込み、有効ならsession_stateに復元する。
+    期限切れの場合はrefresh_tokenで更新してNotionにも保存する。
+    """
+    if "google_oauth_creds" in st.session_state:
+        return  # 既に復元済み
+
+    cfg = _oauth_config()
+    if not cfg:
+        return
+
+    tok = load_oauth_token("gdrive")
+    if not tok or not tok.get("access_token"):
+        return
+
+    # 有効期限チェック
+    expiry_str = tok.get("expiry", "")
+    is_expired = True
+    if expiry_str:
+        try:
+            from datetime import timezone as _tz
+            expiry_dt = datetime.datetime.fromisoformat(expiry_str)
+            is_expired = expiry_dt <= datetime.datetime.now(tz=_tz.utc)
+        except Exception:
+            is_expired = True
+
+    if is_expired and tok.get("refresh_token"):
+        # リフレッシュ
+        new_tok = _refresh_access_token(cfg, tok["refresh_token"])
+        if not new_tok:
+            return
+        import time as _time
+        expiry_dt = datetime.datetime.fromtimestamp(
+            _time.time() + new_tok.get("expires_in", 3600),
+            tz=datetime.timezone.utc,
+        )
+        access_token  = new_tok["access_token"]
+        refresh_token = new_tok.get("refresh_token") or tok["refresh_token"]
+        expiry        = expiry_dt.isoformat()
+        save_oauth_token("gdrive", access_token, refresh_token, expiry)
+    elif is_expired:
+        return  # リフレッシュトークンもなければ再認証が必要
+    else:
+        access_token  = tok["access_token"]
+        refresh_token = tok.get("refresh_token", "")
+
+    st.session_state["google_oauth_creds"] = {
+        "token":         access_token,
+        "refresh_token": refresh_token,
+        "token_uri":     "https://oauth2.googleapis.com/token",
+        "client_id":     cfg["client_id"],
+        "client_secret": cfg["client_secret"],
+        "scopes":        ["https://www.googleapis.com/auth/drive.file"],
+    }
+
+
 def _get_drive_service():
     creds_dict = st.session_state.get("google_oauth_creds")
     if not creds_dict:
@@ -81,6 +159,9 @@ def _upload_to_drive(file_name: str, file_bytes: bytes, mime_type: str) -> tuple
     except Exception as e:
         return False, str(e)
 
+
+# 起動時にNotionからトークンを復元（session_stateが空でも認証済み状態を維持）
+_load_and_restore_token()
 
 tab_ask, tab_save = st.tabs(["💬 質問する", "💾 保存する"])
 
