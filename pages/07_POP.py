@@ -280,16 +280,11 @@ with tab_save:
 
     # ── Google認証状態の表示・認証ボタン ──────────────────
     is_authenticated = "google_oauth_creds" in st.session_state
-    if is_authenticated:
-        st.success("✅ Googleドライブに接続済み")
-        if st.button("🔓 ログアウト", key="gdrive_logout"):
-            st.session_state.pop("google_oauth_creds", None)
-            st.rerun()
-    else:
+    if not is_authenticated:
         _cfg = _oauth_config()
         if _cfg:
             _auth_url = _build_auth_url(_cfg)
-            st.info("Googleドライブへのアップロードには認証が必要です。")
+            st.info("5MB超のファイルをGoogleドライブに保存するには認証が必要です。")
             st.link_button("🔑 Googleアカウントで認証する", _auth_url)
         else:
             st.warning("GOOGLE_OAUTH_JSON が設定されていません。")
@@ -371,3 +366,12 @@ with tab_save:
                         else:
                             st.warning(f"⚠️ Driveへの保存は完了しました。Notionの記録に失敗：{msg}")
                         st.cache_data.clear()
+
+    # ── Driveログアウト（最下部に小さく） ─────────────────
+    if is_authenticated:
+        st.markdown("---")
+        with st.expander("⚙️ Googleドライブ接続設定", expanded=False):
+            st.caption("✅ Googleドライブに接続済みです。")
+            if st.button("🔓 ログアウト", key="gdrive_logout"):
+                st.session_state.pop("google_oauth_creds", None)
+                st.rerun()
