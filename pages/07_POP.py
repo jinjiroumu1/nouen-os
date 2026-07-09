@@ -147,6 +147,7 @@ def _get_drive_service():
 
 
 def _upload_to_drive(file_name: str, file_bytes: bytes, mime_type: str) -> tuple[bool, str]:
+    """Driveにアップロードし (成功フラグ, ファイルURL or エラー文字列) を返す。"""
     service = _get_drive_service()
     if not service:
         return False, "Googleドライブに未認証です"
@@ -154,8 +155,9 @@ def _upload_to_drive(file_name: str, file_bytes: bytes, mime_type: str) -> tuple
         from googleapiclient.http import MediaIoBaseUpload
         metadata = {"name": file_name, "parents": [POP_DRIVE_FOLDER_ID]}
         media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=True)
-        service.files().create(body=metadata, media_body=media, fields="id").execute()
-        return True, ""
+        f = service.files().create(body=metadata, media_body=media, fields="id,webViewLink").execute()
+        url = f.get("webViewLink", f"https://drive.google.com/file/d/{f['id']}/view")
+        return True, url
     except Exception as e:
         return False, str(e)
 
@@ -299,9 +301,10 @@ with tab_save:
         keyword      = st.text_input("キーワード", placeholder="例：夏　辛い　ジンジャー")
         category     = st.radio("区分", ["野菜", "農家", "値札", "イベント", "カフェメニュー"],
                                 horizontal=True)
-        uploaded     = st.file_uploader("POPデータ（画像・PDF・PPTX）",
-                                        type=["png", "jpg", "jpeg", "gif", "webp", "pdf", "pptx"])
-        submitted    = st.form_submit_button("💾 保存する", disabled=not is_authenticated)
+        uploaded     = st.file_uploader(
+                            "POPデータ（画像・PDF・PPTX）　※5MB以下はNotion、5MB超はGoogleドライブに保存",
+                            type=["png", "jpg", "jpeg", "gif", "webp", "pdf", "pptx"])
+        submitted    = st.form_submit_button("💾 保存する")
 
     if submitted:
         if not product_name:
@@ -313,31 +316,58 @@ with tab_save:
             ext        = uploaded.name.rsplit(".", 1)[-1]
             fname      = f"{category}_{product_name}_{keyword}_{today}.{ext}"
             file_bytes = uploaded.read()
+            file_size  = len(file_bytes)
+            SIZE_5MB   = 5 * 1024 * 1024
 
-            # 1. Google Driveにアップロード
-            with st.spinner("Googleドライブにアップロード中…"):
-                drive_ok, drive_err = _upload_to_drive(fname, file_bytes, uploaded.type)
-
-            if not drive_ok:
-                st.error(f"Driveへのアップロードに失敗しました：{drive_err}")
-            else:
-                # 2. Notionにメタデータ保存（ファイルはDriveに保存済みのためNoneで渡す）
-                with st.spinner("Notionにメタデータを保存中…"):
+            if file_size <= SIZE_5MB:
+                # ── 5MB以下 → Notionに直接添付 ───────────────
+                with st.spinner("Notionに保存中…"):
                     ok, msg = save_pop_record(
                         product_name=product_name,
                         keyword=keyword,
                         category=category,
                         file_name=fname,
-                        file_bytes=None,
+                        file_bytes=file_bytes,
                         mime_type=uploaded.type,
                     )
                 if ok:
+                    label = msg if msg and "失敗" not in msg else "保存しました（Notion）"
                     if msg and "失敗" in msg:
-                        st.warning(f"⚠️ Driveへの保存は完了しました。Notionの記録に問題：{msg}")
-                    elif msg:
-                        st.success(f"✅ {msg}（Drive＋Notion）：{fname}")
+                        st.warning(f"⚠️ {msg}")
                     else:
-                        st.success(f"✅ 保存しました（Drive＋Notion）：{fname}")
+                        st.success(f"✅ {label}：{fname}")
                     st.cache_data.clear()
                 else:
-                    st.warning(f"⚠️ Driveへの保存は完了しました。Notionの記録に失敗：{msg}")
+                    st.error(f"保存に失敗しました：{msg}")
+
+            else:
+                # ── 5MB超 → Googleドライブにアップロード ──────
+                if not is_authenticated:
+                    st.error("5MB超のファイルはGoogleドライブへのアップロードが必要です。先に認証してください。")
+                else:
+                    with st.spinner("Googleドライブにアップロード中…"):
+                        drive_ok, drive_result = _upload_to_drive(fname, file_bytes, uploaded.type)
+
+                    if not drive_ok:
+                        st.error(f"Driveへのアップロードに失敗しました：{drive_result}")
+                    else:
+                        drive_url = drive_result
+                        with st.spinner("NotionにメタデータとDriveリンクを保存中…"):
+                            ok, msg = save_pop_record(
+                                product_name=product_name,
+                                keyword=keyword,
+                                category=category,
+                                file_name=fname,
+                                file_bytes=None,
+                                mime_type=uploaded.type,
+                                drive_url=drive_url,
+                            )
+                        if ok:
+                            label = msg if msg and "失敗" not in msg else "保存しました（Drive＋Notion）"
+                            if msg and "失敗" in msg:
+                                st.warning(f"⚠️ Driveへの保存は完了。Notionの記録に問題：{msg}")
+                            else:
+                                st.success(f"✅ {label}：{fname}")
+                        else:
+                            st.warning(f"⚠️ Driveへの保存は完了しました。Notionの記録に失敗：{msg}")
+                        st.cache_data.clear()

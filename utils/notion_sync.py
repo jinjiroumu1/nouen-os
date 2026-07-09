@@ -712,11 +712,14 @@ def save_pop_record(
     keyword: str,
     category: str,
     file_name: str,
-    file_bytes: bytes,
+    file_bytes: bytes | None,
     mime_type: str,
+    drive_url: str = "",
 ) -> tuple[bool, str]:
     """
     POP記録DBにレコードを保存する。同名商品が存在する場合は上書き更新。
+    - file_bytes が指定されている場合は Notion File Upload API でページに添付する。
+    - drive_url が指定されている場合は外部リンクブロックをページ本文に追記する。
     返り値: (成功フラグ, エラーメッセージ)
     """
     import datetime as _dt
@@ -759,11 +762,12 @@ def save_pop_record(
     except Exception as e:
         return False, f"{'更新' if existing_id else '作成'}失敗: {e}"
 
-    # ファイルアップロード（上書き時は既存ファイルブロックを先に削除）
-    if file_bytes:
-        if is_update:
-            _delete_file_blocks(client, page_id)
+    # 既存ファイル/リンクブロックを削除（上書き時）
+    if is_update:
+        _delete_file_blocks(client, page_id)
 
+    # ファイルをNotionに添付
+    if file_bytes:
         upload_id = _notion_upload_file(token, file_name, file_bytes, mime_type)
         if upload_id:
             try:
@@ -778,7 +782,20 @@ def save_pop_record(
                     }],
                 )
             except Exception:
-                return True, "レコードは保存しましたが、ファイルの添付に失敗しました"
+                return True, "レコードは保存しましたが、Notionへのファイル添付に失敗しました"
+
+    # GoogleドライブURLをページ本文にリンクブロックとして記録
+    if drive_url:
+        try:
+            client.blocks.children.append(
+                block_id=page_id,
+                children=[{
+                    "type": "bookmark",
+                    "bookmark": {"url": drive_url},
+                }],
+            )
+        except Exception:
+            pass  # リンク追記失敗はサイレント（メタデータは保存済み）
 
     return True, "上書き更新しました" if is_update else ""
 
