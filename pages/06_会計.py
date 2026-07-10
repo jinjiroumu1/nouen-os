@@ -302,7 +302,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                         product_name     = it["name"],
                         unit_price       = round(unit_price, 1),
                         quantity         = it["quantity"],
-                        shipping         = round(p_shipping, 1),
+                        shipping         = round(ship_per_unit, 1),
                         tax_type         = p_tax,
                         total_unit_price = round(total_unit, 1),
                         note             = p_note,
@@ -314,7 +314,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                         product_name     = it["name"],
                         unit_price       = round(unit_price, 1),
                         quantity         = it["quantity"],
-                        shipping         = round(p_shipping, 1),
+                        shipping         = round(ship_per_unit, 1),
                         tax_type         = p_tax,
                         total_unit_price = round(total_unit, 1),
                         note             = p_note,
@@ -353,7 +353,8 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                     st.session_state["p_date_pre"]     = _first["purchase_date"]
                     st.session_state["p_supplier_pre"] = _first["supplier"]
                     st.session_state["p_tax_pre"]      = _first["tax_type"]
-                    st.session_state["p_shipping_pre"] = float(_first["shipping"]) * len(_rows)
+                    _total_qty = sum(int(r["quantity"]) for r in _rows)
+                    st.session_state["p_shipping_pre"] = float(_first["shipping"]) * _total_qty
                     st.session_state["p_note_pre"]     = _first["note"]
                     st.session_state["purchase_items"] = [
                         {"name": r["product_name"],
