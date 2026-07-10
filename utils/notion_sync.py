@@ -306,6 +306,18 @@ def update_purchase_record(
         return False, str(e)
 
 
+def delete_purchase_record(page_id: str) -> tuple[bool, str]:
+    """仕入れ記録のページをアーカイブ（削除）する。"""
+    client = _get_client()
+    if not client:
+        return False, "Notionクライアント初期化失敗"
+    try:
+        client.pages.update(page_id=page_id, archived=True)
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
 def _get_or_create_purchase_db(client) -> str | None:
     """会計ページに仕入れ記録DBを取得または作成してIDを返す。"""
     try:

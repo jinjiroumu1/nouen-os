@@ -4,7 +4,7 @@ from utils.ai_advisor import get_ai_response_accounting, extract_delivery_note
 from utils.sheets_loader import load_sheets, append_cost_row, upload_delivery_photo, search_delivery_photos
 from utils.notion_sync import (save_accounting_log, save_accounting_decision, load_accounting_decisions,
                                update_accounting_decision, save_purchase_record, load_purchase_records,
-                               update_purchase_record)
+                               update_purchase_record, delete_purchase_record)
 from pathlib import Path as _P
 
 st.set_page_config(page_title="会計・原価管理", page_icon="💰", layout="wide")
@@ -234,8 +234,15 @@ div[data-testid="stRadio"] label[data-checked="true"] {
             with c3:
                 items[i]["quantity"] = st.number_input("仕入個数", value=int(item["quantity"]), min_value=1, step=1, key=f"p_qty_{_rev}_{i}")
             with c4:
-                if st.button("🗑️", key=f"p_del_{_rev}_{i}") and len(items) > 1:
-                    st.session_state.purchase_items.pop(i)
+                if st.button("🗑️", key=f"p_del_{_rev}_{i}"):
+                    _edit_ids = st.session_state.get("p_edit_page_ids", [])
+                    if _edit_ids and i < len(_edit_ids):
+                        # 修正モード：Notionからも削除
+                        delete_purchase_record(_edit_ids[i])
+                        _edit_ids.pop(i)
+                        st.session_state["p_edit_page_ids"] = _edit_ids
+                    if len(items) > 1:
+                        st.session_state.purchase_items.pop(i)
                     st.rerun()
 
         if st.button("➕ 商品を追加", key=f"p_add_{_rev}"):
@@ -295,7 +302,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                         product_name     = it["name"],
                         unit_price       = round(unit_price, 1),
                         quantity         = it["quantity"],
-                        shipping         = round(ship_per_unit, 1),
+                        shipping         = round(p_shipping, 1),
                         tax_type         = p_tax,
                         total_unit_price = round(total_unit, 1),
                         note             = p_note,
@@ -307,7 +314,7 @@ div[data-testid="stRadio"] label[data-checked="true"] {
                         product_name     = it["name"],
                         unit_price       = round(unit_price, 1),
                         quantity         = it["quantity"],
-                        shipping         = round(ship_per_unit, 1),
+                        shipping         = round(p_shipping, 1),
                         tax_type         = p_tax,
                         total_unit_price = round(total_unit, 1),
                         note             = p_note,
