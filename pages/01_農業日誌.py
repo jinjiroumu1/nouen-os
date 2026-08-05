@@ -211,9 +211,32 @@ else:
             r1c1, r1c2 = st.columns([7, 1])
             r1c1.markdown(f"**{title}** {src_icon}")
             with r1c2:
-                like_label = f"✅ {likes}" if already_liked else f"👍 {likes}"
-                if page_id and not already_liked:
-                    if st.button(like_label, key=f"like_{page_id}"):
+                like_label = f"👍 {likes}"
+                safe_id    = page_id.replace("-", "")
+                if already_liked:
+                    # いいね済み：青背景ボタン風CSS を注入してから caption 表示
+                    st.markdown(
+                        f"<style>"
+                        f".liked-{safe_id} + div[data-testid='stButton'] button{{"
+                        f"background:#1d4ed8!important;color:#fff!important;"
+                        f"border-color:#1d4ed8!important;opacity:1!important;}}"
+                        f"</style>"
+                        f'<span class="liked-{safe_id}"></span>',
+                        unsafe_allow_html=True,
+                    )
+                    st.button(like_label, key=f"like_{page_id}", disabled=True)
+                else:
+                    # いいね前：薄いグレーボタン
+                    st.markdown(
+                        f"<style>"
+                        f".notliked-{safe_id} + div[data-testid='stButton'] button{{"
+                        f"background:#f3f4f6!important;color:#9ca3af!important;"
+                        f"border-color:#e5e7eb!important;}}"
+                        f"</style>"
+                        f'<span class="notliked-{safe_id}"></span>',
+                        unsafe_allow_html=True,
+                    )
+                    if page_id and st.button(like_label, key=f"like_{page_id}"):
                         ok, err = update_farm_diary_likes(page_id, likes)
                         if ok:
                             st.session_state.liked_pages.append(page_id)
@@ -222,8 +245,6 @@ else:
                             st.rerun()
                         else:
                             st.error(f"いいね失敗: {err}")
-                else:
-                    st.caption(like_label)
 
             # 2行目：書いた人
             if row.get("author"):
