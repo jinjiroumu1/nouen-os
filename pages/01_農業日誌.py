@@ -22,7 +22,9 @@ if "chat_history" not in st.session_state:
 if "ai_responses" not in st.session_state:
     st.session_state.ai_responses = []    # 表示用（役割付き）
 if "liked_pages" not in st.session_state:
-    st.session_state.liked_pages = set()  # セッション中にいいね済みのpage_id
+    st.session_state.liked_pages = []    # セッション中にいいね済みのpage_id（list で保持）
+if "likes_delta" not in st.session_state:
+    st.session_state.likes_delta = {}    # page_id -> 加算済みいいね数（キャッシュ補正用）
 
 # ── 入力フォーム ──────────────────────────────────────────
 with st.expander("📝 新しい日誌を書く", expanded=True):
@@ -197,7 +199,34 @@ else:
     for row in all_rows:
         if search and search not in str(row.values()):
             continue
+
+        page_id       = row.get("page_id", "")
+        # キャッシュ遅延を補正：ボタン押下後に session_state 側で+1を反映
+        likes         = row.get("likes", 0) + st.session_state.likes_delta.get(page_id, 0)
+        already_liked = page_id in st.session_state.liked_pages
+
+        # ── ヘッダー行：日付/タイトル・書いた人・いいね ──
+        hc1, hc2, hc3 = st.columns([5, 2, 1])
         title = row.get("title") or f"{row.get('date','')} ／ {row.get('crop','—')}"
+        hc1.markdown(f"**{title}**")
+        if row.get("author"):
+            hc2.caption(f"✍️ {row['author']}")
+        with hc3:
+            like_label = f"✅ {likes}" if already_liked else f"👍 {likes}"
+            if page_id and not already_liked:
+                if st.button(like_label, key=f"like_{page_id}"):
+                    ok, err = update_farm_diary_likes(page_id, likes)
+                    if ok:
+                        st.session_state.liked_pages.append(page_id)
+                        st.session_state.likes_delta[page_id] = \
+                            st.session_state.likes_delta.get(page_id, 0) + 1
+                        st.rerun()
+                    else:
+                        st.error(f"いいね失敗: {err}")
+            else:
+                st.caption(like_label)
+
+        # ── 日誌本文 ──
         body_parts = []
         if row.get("work_done"):
             body_parts.append(f"【作業】{row['work_done']}")
@@ -207,25 +236,4 @@ else:
             body_parts.append(f"【疑問・問い】{row['question']}")
         if row.get("hypothesis"):
             body_parts.append(f"【仮説】{row['hypothesis']}")
-
-        knowledge_card(title, "\n".join(body_parts), row.get("source_type", "souhatsuchi"))
-
-        # 書いた人・いいねボタン
-        meta_cols = st.columns([3, 2, 1])
-        with meta_cols[0]:
-            if row.get("author"):
-                st.caption(f"✍️ {row['author']}")
-        page_id = row.get("page_id", "")
-        likes   = row.get("likes", 0)
-        already_liked = page_id in st.session_state.liked_pages
-        with meta_cols[1]:
-            like_label = f"👍 {likes}" if not already_liked else f"✅ {likes}"
-            if page_id and not already_liked:
-                if st.button(like_label, key=f"like_{page_id}"):
-                    ok, _ = update_farm_diary_likes(page_id, likes)
-                    if ok:
-                        st.session_state.liked_pages.add(page_id)
-                        st.cache_data.clear()
-                        st.rerun()
-            else:
-                st.caption(like_label)
+        knowledge_card("", "\n".join(body_parts), row.get("source_type", "souhatsuchi"))
