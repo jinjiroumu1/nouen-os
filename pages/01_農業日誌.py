@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 from db.database import get_connection
-from components.knowledge_card import knowledge_card
 from utils.notion_sync import save_farm_diary, update_farm_diary_likes
 from utils.ai_advisor import get_ai_response, MAX_TURNS
 
@@ -196,44 +195,46 @@ if not all_rows:
     st.info("まだ日誌がありません。上のフォームから記録を始めましょう。")
 else:
     search = st.text_input("🔍 絞り込み（作物・作業・気づき）")
+    SOURCE_ICON = {"souhatsuchi": "🌸", "kenjinchi": "💙", "kasanatta": "💜", "suuchi": "🩶"}
     for row in all_rows:
         if search and search not in str(row.values()):
             continue
 
         page_id       = row.get("page_id", "")
-        # キャッシュ遅延を補正：ボタン押下後に session_state 側で+1を反映
         likes         = row.get("likes", 0) + st.session_state.likes_delta.get(page_id, 0)
         already_liked = page_id in st.session_state.liked_pages
+        title         = row.get("title") or f"{row.get('date','')} ／ {row.get('crop','—')}"
+        src_icon      = SOURCE_ICON.get(row.get("source_type", "souhatsuchi"), "📝")
 
-        # ── ヘッダー行：日付/タイトル・書いた人・いいね ──
-        hc1, hc2, hc3 = st.columns([5, 2, 1])
-        title = row.get("title") or f"{row.get('date','')} ／ {row.get('crop','—')}"
-        hc1.markdown(f"**{title}**")
-        if row.get("author"):
-            hc2.caption(f"✍️ {row['author']}")
-        with hc3:
-            like_label = f"✅ {likes}" if already_liked else f"👍 {likes}"
-            if page_id and not already_liked:
-                if st.button(like_label, key=f"like_{page_id}"):
-                    ok, err = update_farm_diary_likes(page_id, likes)
-                    if ok:
-                        st.session_state.liked_pages.append(page_id)
-                        st.session_state.likes_delta[page_id] = \
-                            st.session_state.likes_delta.get(page_id, 0) + 1
-                        st.rerun()
-                    else:
-                        st.error(f"いいね失敗: {err}")
-            else:
-                st.caption(like_label)
+        with st.container(border=True):
+            # 1行目：日付・いいね
+            r1c1, r1c2 = st.columns([7, 1])
+            r1c1.markdown(f"**{title}** {src_icon}")
+            with r1c2:
+                like_label = f"✅ {likes}" if already_liked else f"👍 {likes}"
+                if page_id and not already_liked:
+                    if st.button(like_label, key=f"like_{page_id}"):
+                        ok, err = update_farm_diary_likes(page_id, likes)
+                        if ok:
+                            st.session_state.liked_pages.append(page_id)
+                            st.session_state.likes_delta[page_id] = \
+                                st.session_state.likes_delta.get(page_id, 0) + 1
+                            st.rerun()
+                        else:
+                            st.error(f"いいね失敗: {err}")
+                else:
+                    st.caption(like_label)
 
-        # ── 日誌本文 ──
-        body_parts = []
-        if row.get("work_done"):
-            body_parts.append(f"【作業】{row['work_done']}")
-        if row.get("observation"):
-            body_parts.append(f"【観察・気づき】{row['observation']}")
-        if row.get("question"):
-            body_parts.append(f"【疑問・問い】{row['question']}")
-        if row.get("hypothesis"):
-            body_parts.append(f"【仮説】{row['hypothesis']}")
-        knowledge_card("", "\n".join(body_parts), row.get("source_type", "souhatsuchi"))
+            # 2行目：書いた人
+            if row.get("author"):
+                st.caption(f"✍️ {row['author']}")
+
+            # 3行目以降：本文
+            if row.get("work_done"):
+                st.markdown(f"**作業** {row['work_done']}")
+            if row.get("observation"):
+                st.markdown(f"**観察・気づき** {row['observation']}")
+            if row.get("question"):
+                st.markdown(f"**疑問・問い** {row['question']}")
+            if row.get("hypothesis"):
+                st.markdown(f"**仮説** {row['hypothesis']}")
