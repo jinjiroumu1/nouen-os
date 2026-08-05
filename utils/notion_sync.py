@@ -73,8 +73,22 @@ def save_farm_diary(date, weather, crop, work_done, observation, question, hypot
         st.warning(f"Notion同期エラー（農業日誌）: {e}")
 
 
+def _ensure_likes_property(client) -> None:
+    """農業日誌DBに「いいね数」numberプロパティがなければ追加する。"""
+    db_id = DB_IDS["farm_diary"]
+    try:
+        db = client.databases.retrieve(database_id=db_id)
+        if "いいね数" not in db.get("properties", {}):
+            client.databases.update(
+                database_id=db_id,
+                properties={"いいね数": {"number": {}}},
+            )
+    except Exception:
+        pass  # 取得・更新失敗は呼び出し元のエラーに任せる
+
+
 def update_farm_diary_likes(page_id: str, current_likes: int) -> tuple[bool, str]:
-    """農業日誌のいいね数を+1する。"""
+    """農業日誌のいいね数を+1する。プロパティが存在しない場合は自動作成する。"""
     client = _get_client()
     if not client:
         return False, "Notionクライアント初期化失敗"
@@ -85,7 +99,19 @@ def update_farm_diary_likes(page_id: str, current_likes: int) -> tuple[bool, str
         )
         return True, ""
     except Exception as e:
-        return False, str(e)
+        err_str = str(e)
+        # プロパティが存在しないエラーの場合はDBに追加してリトライ
+        if "いいね数" in err_str or "property" in err_str.lower():
+            _ensure_likes_property(client)
+            try:
+                client.pages.update(
+                    page_id=page_id,
+                    properties={"いいね数": {"number": current_likes + 1}},
+                )
+                return True, ""
+            except Exception as e2:
+                return False, str(e2)
+        return False, err_str
 
 
 def save_cultivation_plan(month, crop, sowing_date, planting_date, harvest_period,
