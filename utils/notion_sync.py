@@ -46,7 +46,7 @@ def _date(value):
     return {"date": {"start": str(value)}} if value else {"date": None}
 
 
-def save_farm_diary(date, weather, crop, work_done, observation, question, hypothesis, source_type):
+def save_farm_diary(date, weather, crop, work_done, observation, question, hypothesis, source_type, author=""):
     client = _get_client()
     if not client:
         return
@@ -65,10 +65,27 @@ def save_farm_diary(date, weather, crop, work_done, observation, question, hypot
                 "疑問・問い":   _rich_text(question),
                 "仮説":         _rich_text(hypothesis),
                 "知識の種別":   _select(label),
+                "書いた人":     _rich_text(author),
+                "いいね数":     {"number": 0},
             },
         )
     except Exception as e:
         st.warning(f"Notion同期エラー（農業日誌）: {e}")
+
+
+def update_farm_diary_likes(page_id: str, current_likes: int) -> tuple[bool, str]:
+    """農業日誌のいいね数を+1する。"""
+    client = _get_client()
+    if not client:
+        return False, "Notionクライアント初期化失敗"
+    try:
+        client.pages.update(
+            page_id=page_id,
+            properties={"いいね数": {"number": current_likes + 1}},
+        )
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 
 def save_cultivation_plan(month, crop, sowing_date, planting_date, harvest_period,

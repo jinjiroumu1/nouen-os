@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import date
 from db.database import get_connection
 from components.knowledge_card import knowledge_card
-from utils.notion_sync import save_farm_diary
+from utils.notion_sync import save_farm_diary, update_farm_diary_likes
 from utils.ai_advisor import get_ai_response, MAX_TURNS
 
 st.set_page_config(page_title="農業日誌", page_icon="🌿", layout="wide")
@@ -21,17 +21,21 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []    # AIとのやり取り履歴
 if "ai_responses" not in st.session_state:
     st.session_state.ai_responses = []    # 表示用（役割付き）
+if "liked_pages" not in st.session_state:
+    st.session_state.liked_pages = set()  # セッション中にいいね済みのpage_id
 
 # ── 入力フォーム ──────────────────────────────────────────
 with st.expander("📝 新しい日誌を書く", expanded=True):
     with st.form("diary_form"):
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             entry_date = st.date_input("日付", value=date.today())
         with col2:
             weather = st.selectbox("天候", ["晴れ", "曇り", "雨", "雪", "その他"])
         with col3:
             crop = st.text_input("作物", placeholder="例：トマト、きゅうり")
+        with col4:
+            author = st.text_input("書いた人", placeholder="例：矢萩")
 
         work_done    = st.text_area("作業内容", placeholder="今日やったこと")
         observation  = st.text_area("観察・気づき（創発知）", placeholder="現場で感じたこと・変化")
@@ -62,7 +66,7 @@ with st.expander("📝 新しい日誌を書く", expanded=True):
             conn.commit()
             conn.close()
             save_farm_diary(entry_date, weather, crop, work_done, observation,
-                            question, hypothesis, source_type)
+                            question, hypothesis, source_type, author)
 
             # AI対話のリセット＆日誌を保存
             st.session_state.diary_entry = {
@@ -158,7 +162,10 @@ def _load_diary_from_notion():
                 if t == "select":
                     return (p.get("select") or {}).get("name","")
                 return ""
+            likes_prop = props.get("いいね数", {})
+            likes = likes_prop.get("number") or 0
             rows.append({
+                "page_id":     page["id"],
                 "title":       txt("タイトル"),
                 "crop":        txt("作物"),
                 "work_done":   txt("作業内容"),
@@ -166,6 +173,8 @@ def _load_diary_from_notion():
                 "hypothesis":  txt("仮説"),
                 "question":    txt("疑問・問い"),
                 "source_type": txt("知識の種別") or "souhatsuchi",
+                "author":      txt("書いた人"),
+                "likes":       int(likes),
             })
         return rows
     except Exception as e:
@@ -186,6 +195,8 @@ if not all_rows:
 else:
     search = st.text_input("🔍 絞り込み（作物・作業・気づき）")
     for row in all_rows:
+        if search and search not in str(row.values()):
+            continue
         title = row.get("title") or f"{row.get('date','')} ／ {row.get('crop','—')}"
         body_parts = []
         if row.get("work_done"):
@@ -196,6 +207,25 @@ else:
             body_parts.append(f"【疑問・問い】{row['question']}")
         if row.get("hypothesis"):
             body_parts.append(f"【仮説】{row['hypothesis']}")
-        if search and search not in str(row.values()):
-            continue
+
         knowledge_card(title, "\n".join(body_parts), row.get("source_type", "souhatsuchi"))
+
+        # 書いた人・いいねボタン
+        meta_cols = st.columns([3, 2, 1])
+        with meta_cols[0]:
+            if row.get("author"):
+                st.caption(f"✍️ {row['author']}")
+        page_id = row.get("page_id", "")
+        likes   = row.get("likes", 0)
+        already_liked = page_id in st.session_state.liked_pages
+        with meta_cols[1]:
+            like_label = f"👍 {likes}" if not already_liked else f"✅ {likes}"
+            if page_id and not already_liked:
+                if st.button(like_label, key=f"like_{page_id}"):
+                    ok, _ = update_farm_diary_likes(page_id, likes)
+                    if ok:
+                        st.session_state.liked_pages.add(page_id)
+                        st.cache_data.clear()
+                        st.rerun()
+            else:
+                st.caption(like_label)
