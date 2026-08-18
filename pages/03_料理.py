@@ -11,9 +11,10 @@ _img = _P("docs/characters/midori.png")
 if _img.exists():
     st.sidebar.image(str(_img), width=150)
 st.title("🍳 料理")
-st.caption("畑の延長。収穫物から旬・保存性・原価率を考えてレシピを記録する。")
 
 SEASONS = ["春", "夏", "秋", "冬", "通年"]
+
+QUERY_OPTIONS = ["料理を検索", "野菜の見分け方", "保存方法"]
 
 if "recipe_entry" not in st.session_state:
     st.session_state.recipe_entry = None
@@ -22,58 +23,31 @@ if "recipe_chat" not in st.session_state:
 if "recipe_responses" not in st.session_state:
     st.session_state.recipe_responses = []
 
-with st.expander("📝 レシピを記録する", expanded=True):
-    with st.form("recipe_form"):
-        col1, col2 = st.columns(2)
-        with col1:
-            recipe_name = st.text_input("料理名", placeholder="例：ナスの味噌炒め")
-            vegetable   = st.text_input("主な野菜", placeholder="例：ナス、ピーマン")
-            season      = st.selectbox("旬・季節", SEASONS)
-        with col2:
-            ingredients = st.text_area("材料・分量", placeholder="例：ナス2本、味噌大さじ2…")
-            notes       = st.text_area("メモ（保存法・原価・人気度）",
-                                       placeholder="例：田心カフェで好評。原価率25%")
+# ── 野菜質問エリア ────────────────────────────────────────
+vegetable_q = st.text_input("主な野菜", placeholder="例：にんじん")
+query_types  = st.multiselect("知りたいことを選んでください", QUERY_OPTIONS)
 
-        source_type = st.selectbox(
-            "知識の種別",
-            ["souhatsuchi", "kenjinchi", "kasanatta"],
-            format_func=lambda x: {"souhatsuchi": "🌸 創発知（自分たちのレシピ）",
-                                   "kenjinchi": "💙 賢人知（書籍・引用）",
-                                   "kasanatta": "💜 重なった知"}[x],
-        )
+if st.button("質問する", type="primary", disabled=not (vegetable_q and query_types)):
+    st.session_state.recipe_entry = {
+        "vegetable":   vegetable_q,
+        "recipe_name": "",
+        "ingredients": "",
+        "season":      "",
+        "notes":       "",
+    }
+    st.session_state.recipe_chat      = []
+    st.session_state.recipe_responses = []
+    with st.spinner("AI勘ちゃんが調べています…"):
+        reply = get_ai_response_recipe(
+            st.session_state.recipe_entry, [], query_types=query_types)
+    st.session_state.recipe_responses.append({"role": "assistant", "content": reply})
+    st.session_state.recipe_chat.append({"role": "assistant", "content": reply})
+    st.rerun()
 
-        submitted = st.form_submit_button("記録する")
-        if submitted and recipe_name:
-            conn = get_connection()
-            conn.execute(
-                """INSERT INTO recipes
-                   (recipe_name, vegetable, ingredients, season, notes, source_type)
-                   VALUES (?,?,?,?,?,?)""",
-                (recipe_name, vegetable, ingredients, season, notes, source_type),
-            )
-            conn.commit()
-            conn.close()
-            save_recipe(recipe_name, vegetable, ingredients, season, notes, source_type)
-
-            st.session_state.recipe_entry = {
-                "recipe_name": recipe_name, "vegetable": vegetable,
-                "ingredients": ingredients, "season": season, "notes": notes,
-            }
-            st.session_state.recipe_chat      = []
-            st.session_state.recipe_responses = []
-
-            with st.spinner("AI勘ちゃんが考えています…"):
-                reply = get_ai_response_recipe(st.session_state.recipe_entry, [])
-            st.session_state.recipe_responses.append({"role": "assistant", "content": reply})
-            st.session_state.recipe_chat.append({"role": "assistant", "content": reply})
-            st.success("記録しました。（Notionにも同期）")
-            st.rerun()
-
-# ── AI対話 ────────────────────────────────────────────────
+# ── AI対話エリア ──────────────────────────────────────────
 if st.session_state.recipe_entry:
     st.markdown("---")
-    st.subheader("🤝 AI勘ちゃんからのコメント")
-    st.caption(f"料理：{st.session_state.recipe_entry.get('recipe_name','—')}　｜　最大{MAX_TURNS}回の対話")
+    st.subheader("🤝 AI勘ちゃんの回答")
 
     for msg in st.session_state.recipe_responses:
         avatar = "🌱" if msg["role"] == "assistant" else "👨‍🌾"
@@ -82,7 +56,7 @@ if st.session_state.recipe_entry:
 
     user_turns = sum(1 for m in st.session_state.recipe_chat if m["role"] == "user")
     if user_turns < MAX_TURNS - 1:
-        user_input = st.chat_input(f"勘ちゃんへの返事・追加の問い（あと{MAX_TURNS - 1 - user_turns}回）")
+        user_input = st.chat_input(f"追加の質問（あと{MAX_TURNS - 1 - user_turns}回）")
         if user_input:
             st.session_state.recipe_responses.append({"role": "user", "content": user_input})
             st.session_state.recipe_chat.append({"role": "user", "content": user_input})
@@ -101,7 +75,7 @@ if st.session_state.recipe_entry:
         st.session_state.recipe_responses = []
         st.rerun()
 
-# ── 一覧 ─────────────────────────────────────────────────
+# ── レシピ一覧 ────────────────────────────────────────────
 st.markdown("---")
 st.subheader("レシピ一覧")
 
@@ -133,3 +107,41 @@ else:
             if row.get(key):
                 parts.append(f"{label}：{row[key]}")
         knowledge_card(title, "\n".join(parts), row.get("source_type", "souhatsuchi"))
+
+# ── レシピを記録する ──────────────────────────────────────
+st.markdown("---")
+st.subheader("📝 レシピを記録する")
+
+with st.form("recipe_form"):
+    col1, col2 = st.columns(2)
+    with col1:
+        recipe_name = st.text_input("料理名", placeholder="例：ナスの味噌炒め")
+        vegetable_r = st.text_input("主な野菜", placeholder="例：ナス、ピーマン")
+        season      = st.selectbox("旬・季節", SEASONS)
+    with col2:
+        ingredients = st.text_area("材料・分量", placeholder="例：ナス2本、味噌大さじ2…")
+        notes       = st.text_area("メモ（保存法・原価・人気度）",
+                                   placeholder="例：田心カフェで好評。原価率25%")
+
+    source_type = st.selectbox(
+        "知識の種別",
+        ["souhatsuchi", "kenjinchi", "kasanatta"],
+        format_func=lambda x: {"souhatsuchi": "🌸 創発知（自分たちのレシピ）",
+                               "kenjinchi": "💙 賢人知（書籍・引用）",
+                               "kasanatta": "💜 重なった知"}[x],
+    )
+
+    submitted = st.form_submit_button("記録する")
+    if submitted and recipe_name:
+        conn = get_connection()
+        conn.execute(
+            """INSERT INTO recipes
+               (recipe_name, vegetable, ingredients, season, notes, source_type)
+               VALUES (?,?,?,?,?,?)""",
+            (recipe_name, vegetable_r, ingredients, season, notes, source_type),
+        )
+        conn.commit()
+        conn.close()
+        save_recipe(recipe_name, vegetable_r, ingredients, season, notes, source_type)
+        st.success("記録しました。（Notionにも同期）")
+        st.rerun()
