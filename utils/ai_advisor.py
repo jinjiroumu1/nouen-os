@@ -296,60 +296,6 @@ def get_ai_response_cultivation(entry: dict, chat_history: list) -> str:
     return _call_claude(system, f"栽培計画を立てました。\n\n{first}", chat_history, book_keywords=keywords)
 
 
-# ── 青髪のテツ RSS ヘルパー ───────────────────────────────
-@st.cache_data(ttl=3600)
-def _fetch_tetsu_rss() -> list[dict]:
-    """tetsublog.work の RSS を取得し [{title, url}] を返す。失敗時は []。"""
-    import requests as _req
-    import xml.etree.ElementTree as _ET
-    try:
-        resp = _req.get("https://tetsublog.work/feed/", timeout=8)
-        resp.raise_for_status()
-        root = _ET.fromstring(resp.content)
-        ns   = {"atom": "http://www.w3.org/2005/Atom"}
-        items = []
-        for item in root.findall(".//item"):
-            title_el = item.find("title")
-            link_el  = item.find("link")
-            if title_el is not None and link_el is not None:
-                items.append({"title": title_el.text or "", "url": link_el.text or ""})
-        return items
-    except Exception:
-        return []
-
-
-def _fetch_tetsu_article(url: str) -> str:
-    """記事URLのHTMLから本文テキストを抽出して返す（最大1500文字）。"""
-    import requests as _req
-    import re as _re
-    try:
-        resp = _req.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        resp.raise_for_status()
-        html = resp.text
-        # <article>タグ内を優先、なければ<body>全体
-        m = _re.search(r"<article[^>]*>(.*?)</article>", html, _re.S)
-        target = m.group(1) if m else html
-        # タグを除去してテキスト抽出
-        text = _re.sub(r"<[^>]+>", "", target)
-        text = _re.sub(r"\s{2,}", "\n", text).strip()
-        return text[:1500]
-    except Exception:
-        return ""
-
-
-def _find_tetsu_articles(keywords: list[str]) -> list[dict]:
-    """RSS記事一覧からキーワードにマッチする記事を最大2件返す。"""
-    rss = _fetch_tetsu_rss()
-    matched = []
-    for item in rss:
-        title_lower = item["title"].lower()
-        if any(kw and kw.lower() in title_lower for kw in keywords):
-            matched.append(item)
-        if len(matched) >= 2:
-            break
-    return matched
-
-
 # ── 料理 ─────────────────────────────────────────────────
 def get_ai_response_recipe(entry: dict, chat_history: list, query_types: list | None = None) -> str:
     kenjin = fetch_page_tree(KENJIN_PAGE_ID, "賢人コーナー")
@@ -359,16 +305,6 @@ def get_ai_response_recipe(entry: dict, chat_history: list, query_types: list | 
 
     keywords = [k for k in [entry.get("vegetable"), entry.get("recipe_name")] if k]
 
-    # 青髪のテツの記事を取得
-    tetsu_articles = _find_tetsu_articles(keywords)
-    tetsu_context  = ""
-    tetsu_refs     = []
-    for art in tetsu_articles:
-        body = _fetch_tetsu_article(art["url"])
-        if body:
-            tetsu_context += f"\n\n【青髪のテツ記事：{art['title']}】\n{body}"
-            tetsu_refs.append(f"参考：青髪のテツ『やさいのトリセツ』{art['title']} {art['url']}")
-
     # 回答項目ごとの指示を組み立てる
     if query_types:
         sections = []
@@ -376,46 +312,47 @@ def get_ai_response_recipe(entry: dict, chat_history: list, query_types: list | 
             if qt == "料理を検索":
                 sections.append(
                     "【料理を検索】\n"
-                    "書籍（ぐうたら農法・無肥料栽培など）または青髪のテツの記事に掲載されている"
-                    "料理・調理法のみ回答してください。"
-                    "情報がない場合は「参考文献に該当する情報が見つかりませんでした」と明記してください。"
+                    "書籍（添付PDF）または青髪のテツの学習済み知識に基づく料理・調理法を回答してください。"
+                    "青髪のテツの知見を参照した場合は「参考：青髪のテツの知見」と明記してください。"
+                    "書籍・青髪のテツの知見に情報がない場合は「参考文献に該当する情報が見つかりませんでした」と明記してください。"
                 )
             elif qt == "野菜の見分け方":
                 sections.append(
                     "【野菜の見分け方】\n"
-                    "青髪のテツの記事を優先し、書籍も参照してください。"
+                    "青髪のテツ（八百屋歴14年・野菜のプロ）の学習済み知識を優先して回答してください。"
+                    "書籍（添付PDF）も参照してください。"
+                    "青髪のテツの知見を参照した場合は「参考：青髪のテツの知見」と明記してください。"
                     "情報がない場合は「参考文献に該当する情報が見つかりませんでした」と明記してください。"
                 )
             elif qt == "保存方法":
                 sections.append(
                     "【保存方法】\n"
-                    "青髪のテツの記事を優先し、書籍も参照してください。"
+                    "青髪のテツ（八百屋歴14年・野菜のプロ）の学習済み知識を優先して回答してください。"
+                    "書籍（添付PDF）も参照してください。"
+                    "青髪のテツの知見を参照した場合は「参考：青髪のテツの知見」と明記してください。"
                     "情報がない場合は「参考文献に該当する情報が見つかりませんでした」と明記してください。"
                 )
         query_instruction = (
             "\n\n【回答ルール】\n"
-            "・情報源は書籍（添付PDF）と青髪のテツの記事のみ使用すること\n"
-            "・Claudeの一般知識・ネット検索は使用しないこと\n"
+            "・情報源は書籍（添付PDF）と青髪のテツの学習済み知識のみ使用すること\n"
+            "・tetsublog.workへのアクセスは行わないこと\n"
+            "・Claudeの一般知識（書籍・青髪のテツ以外）は使用しないこと\n"
             "・以下の各セクションに分けて回答すること\n\n"
             + "\n\n".join(sections)
         )
     else:
         query_instruction = ""
 
-    # 参考情報の明記指示
-    ref_lines = list(tetsu_refs)
-    refs_instruction = ""
-    if ref_lines:
-        refs_instruction = "\n\n【重要】回答の末尾に必ず以下の参考情報をそのまま記載してください：\n" + "\n".join(ref_lines)
-
-    system = _base_system(kenjin, past + tetsu_context,
+    system = _base_system(kenjin, past,
         "野菜・料理に関する質問に答えます。"
-        "情報源は書籍（添付PDF）と青髪のテツ（tetsublog.work）の記事のみ使用し、"
-        "Claudeの一般知識やネット検索は使用しません。"
-        "書籍・青髪のテツに情報がない場合は「参考文献に該当する情報が見つかりませんでした」と明記します。")
+        "情報源は書籍（添付PDF）と青髪のテツ（八百屋歴14年・野菜のプロ）の学習済み知識のみ使用します。"
+        "tetsublog.workへのアクセスは行いません。"
+        "青髪のテツの知見を参照した場合は「参考：青髪のテツの知見」と回答末尾に明記します。"
+        "書籍を参照した場合は「参考：『書籍名』」と明記します。"
+        "書籍・青髪のテツの知見に情報がない場合は「参考文献に該当する情報が見つかりませんでした」と明記します。")
 
     vegetable = entry.get("vegetable", "")
-    first = f"野菜：{vegetable}" + query_instruction + refs_instruction
+    first = f"野菜：{vegetable}" + query_instruction
 
     return _call_claude(system, first, chat_history, book_keywords=keywords)
 
