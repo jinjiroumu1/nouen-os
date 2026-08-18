@@ -24,8 +24,10 @@ if "recipe_responses" not in st.session_state:
     st.session_state.recipe_responses = []
 
 # ── 野菜質問エリア ────────────────────────────────────────
-vegetable_q = st.text_input("主な野菜", placeholder="例：にんじん")
-query_types  = st.multiselect("知りたいことを選んでください", QUERY_OPTIONS)
+vegetable_q = st.text_input("知りたい野菜", placeholder="例：にんじん")
+st.write("知りたいことを選んでください（複数選択可）")
+cb_cols = st.columns(len(QUERY_OPTIONS))
+query_types = [opt for i, opt in enumerate(QUERY_OPTIONS) if cb_cols[i].checkbox(opt)]
 
 if st.button("質問する", type="primary", disabled=not (vegetable_q and query_types)):
     st.session_state.recipe_entry = {
