@@ -653,6 +653,89 @@ def save_chat_log(question, answer, related_topics, source_type):
         st.warning(f"Notion同期エラー（チャット）: {e}")
 
 
+# ── 料理チャットログDB ────────────────────────────────────
+RECIPE_PAGE_ID_SYNC = "388a73ede4938076b4abd0b27c921982"  # 料理ページ
+_recipe_chat_db_id: str | None = None  # 初回作成後にキャッシュ
+
+
+def _get_or_create_recipe_chat_db(client) -> str:
+    """料理ページ配下の「料理チャットログDB」を取得または作成する。"""
+    global _recipe_chat_db_id
+    if _recipe_chat_db_id:
+        return _recipe_chat_db_id
+    # 既存の子DBを検索
+    try:
+        blocks = client.blocks.children.list(block_id=RECIPE_PAGE_ID_SYNC, page_size=50)
+        for b in blocks.get("results", []):
+            if b.get("type") == "child_database":
+                title = b.get("child_database", {}).get("title", "")
+                if title == "料理チャットログDB":
+                    _recipe_chat_db_id = b["id"]
+                    return _recipe_chat_db_id
+    except Exception:
+        pass
+    # なければ新規作成
+    db = client.databases.create(
+        parent={"type": "page_id", "page_id": RECIPE_PAGE_ID_SYNC},
+        title=[{"type": "text", "text": {"content": "料理チャットログDB"}}],
+        properties={
+            "野菜":     {"title": {}},
+            "質問種別": {"rich_text": {}},
+            "回答":     {"rich_text": {}},
+            "日時":     {"date": {}},
+        },
+    )
+    _recipe_chat_db_id = db["id"]
+    return _recipe_chat_db_id
+
+
+def save_recipe_chat_log(vegetable: str, query_types: list, answer: str) -> None:
+    """料理チャットログDBに質問・回答を保存する。"""
+    client = _get_client()
+    if not client:
+        return
+    try:
+        db_id = _get_or_create_recipe_chat_db(client)
+        client.pages.create(
+            parent={"database_id": db_id},
+            properties={
+                "野菜":     _title(vegetable),
+                "質問種別": _rich_text("、".join(query_types)),
+                "回答":     _rich_text(answer[:2000]),
+                "日時":     {"date": {"start": datetime.now(timezone.utc).date().isoformat()}},
+            },
+        )
+    except Exception as e:
+        st.warning(f"Notion同期エラー（料理チャットログ）: {e}")
+
+
+@st.cache_data(ttl=60)
+def load_recipe_chat_logs(limit: int = 20) -> list[dict]:
+    """料理チャットログDBから直近のログを取得して返す。"""
+    client = _get_client()
+    if not client:
+        return []
+    try:
+        db_id = _get_or_create_recipe_chat_db(client)
+        res = client.databases.query(
+            database_id=db_id,
+            page_size=limit,
+            sorts=[{"timestamp": "created_time", "direction": "descending"}],
+        )
+        items = []
+        for page in res.get("results", []):
+            props = page.get("properties", {})
+            veg   = "".join(r.get("plain_text","") for r in props.get("野菜",{}).get("title",[]))
+            qt    = "".join(r.get("plain_text","") for r in props.get("質問種別",{}).get("rich_text",[]))
+            ans   = "".join(r.get("plain_text","") for r in props.get("回答",{}).get("rich_text",[]))
+            date  = (props.get("日時",{}).get("date") or {}).get("start","")
+            if veg or ans:
+                items.append({"vegetable": veg, "query_types": qt, "answer": ans, "date": date})
+        return items
+    except Exception:
+        return []
+
+
 # ── POP記録DB ──────────────────────────────────────────────
 POP_RECORD_DB_ID = "38ba73ede49380a5beb6e30548302f30"  # POPページ子DB（初回は動的に取得・作成）
 
