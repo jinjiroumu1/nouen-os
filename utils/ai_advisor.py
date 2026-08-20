@@ -296,48 +296,42 @@ def get_ai_response_cultivation(entry: dict, chat_history: list) -> str:
     return _call_claude(system, f"栽培計画を立てました。\n\n{first}", chat_history, book_keywords=keywords)
 
 
-# ── 青髪のテツ記事取得ヘルパー（use_tetsu=True 時のみ使用） ──
-@st.cache_data(ttl=3600)
-def _fetch_tetsu_rss() -> list[dict]:
-    import requests as _req, xml.etree.ElementTree as _ET
+# ── 青髪のテツ web_search ヘルパー ──────────────────────────
+def _call_claude_with_web_search(system: str, query: str, vegetable: str, query_types: list) -> str:
+    """web_search_20250305 ツールを使って青髪のテツの情報を検索して回答する。"""
+    claude = _claude()
+    if not claude:
+        return "（APIキーが設定されていません）"
+    search_query = f"青髪のテツ {vegetable} {' '.join(query_types)}"
+    user_content = f"{query}\n\n検索クエリ：「{search_query}」"
     try:
-        resp = _req.get("https://tetsublog.work/feed/", timeout=8)
-        resp.raise_for_status()
-        root = _ET.fromstring(resp.content)
-        items = []
-        for item in root.findall(".//item"):
-            t = item.find("title")
-            l = item.find("link")
-            if t is not None and l is not None:
-                items.append({"title": t.text or "", "url": l.text or ""})
-        return items
-    except Exception:
-        return []
-
-
-def _fetch_tetsu_article(url: str) -> str:
-    import requests as _req, re as _re
-    try:
-        resp = _req.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        resp.raise_for_status()
-        html = resp.text
-        m = _re.search(r"<article[^>]*>(.*?)</article>", html, _re.S)
-        target = m.group(1) if m else html
-        text = _re.sub(r"<[^>]+>", "", target)
-        text = _re.sub(r"\s{2,}", "\n", text).strip()
-        return text[:1500]
-    except Exception:
-        return ""
-
-
-def _find_tetsu_articles(keywords: list[str]) -> list[dict]:
-    matched = []
-    for item in _fetch_tetsu_rss():
-        if any(kw and kw.lower() in item["title"].lower() for kw in keywords):
-            matched.append(item)
-        if len(matched) >= 2:
-            break
-    return matched
+        resp = claude.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2048,
+            system=system,
+            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
+            messages=[{"role": "user", "content": user_content}],
+        )
+        # テキストブロックとURL参照を収集
+        text_parts = []
+        urls = []
+        for block in resp.content:
+            if block.type == "text":
+                text_parts.append(block.text)
+            elif block.type == "tool_result":
+                pass
+            elif hasattr(block, "type") and block.type == "web_search_tool_result":
+                if isinstance(block.content, list):
+                    for r in block.content:
+                        if hasattr(r, "url") and r.url:
+                            urls.append(r.url)
+        result = "\n".join(text_parts)
+        tetsu_urls = [u for u in urls if "tetsublog" in u or "tetsu" in u.lower()]
+        if tetsu_urls:
+            result += "\n\n" + "\n".join(f"参考：青髪のテツ（{u}）" for u in tetsu_urls)
+        return result if result.strip() else "青髪のテツの情報を取得できませんでした。"
+    except Exception as e:
+        return f"（青髪のテツ検索エラー：{e}）"
 
 
 # ── 料理 ─────────────────────────────────────────────────
@@ -354,17 +348,6 @@ def get_ai_response_recipe(
     keywords  = [k for k in [entry.get("vegetable"), entry.get("recipe_name")] if k]
     vegetable = entry.get("vegetable", "")
 
-    # ── 青髪のテツモード：tetsublog.work からリアルタイム取得 ──
-    tetsu_context = ""
-    tetsu_refs    = []
-    if use_tetsu:
-        articles = _find_tetsu_articles(keywords)
-        for art in articles:
-            body = _fetch_tetsu_article(art["url"])
-            if body:
-                tetsu_context += f"\n\n【青髪のテツ記事：{art['title']}】\n{body}"
-                tetsu_refs.append(f"参考：青髪のテツ『{art['title']}』 {art['url']}")
-
     # ── 回答項目ごとの指示 ──
     qt_label = {
         "料理を検索":    "【料理を検索】\n対象野菜を使った料理・調理法を回答してください。",
@@ -377,31 +360,25 @@ def get_ai_response_recipe(
     else:
         query_instruction = ""
 
-    # ── システムプロンプト・回答末尾指示の組み立て ──
+    # ── システムプロンプト・回答の組み立て ──
     if use_tetsu:
         role_desc = (
             "野菜・料理に関する質問に、青髪のテツ（八百屋歴14年・やさいのトリセツ著者）の"
-            "ブログ記事を元に回答します。"
-            "回答末尾に必ず参照した記事のURLを「参考：青髪のテツ『記事タイトル』URL」の形式で明記します。"
-            "記事に情報がない場合は「青髪のテツの記事に該当する情報が見つかりませんでした」と明記します。"
+            "ブログ情報をweb検索して回答します。"
+            "回答末尾に参照したURLを「参考：青髪のテツ（URL）」の形式で必ず明記します。"
         )
-        refs_note = (
-            ("\n\n【重要】回答末尾に以下の参照記事を必ずそのまま記載してください：\n" + "\n".join(tetsu_refs))
-            if tetsu_refs else
-            "\n\n青髪のテツの記事に該当情報が見つかりませんでした。その旨を回答に明記してください。"
-        )
+        system = _base_system(kenjin, past, role_desc)
+        first  = f"野菜：{vegetable}" + query_instruction
+        return _call_claude_with_web_search(system, first, vegetable, query_types or [])
     else:
         role_desc = (
             "野菜・料理に関する質問に、AIの学習知識で回答します。"
             "回答の冒頭に「※ AIの一般知識による回答です」と明記します。"
             "書籍（添付PDF）を参照した場合は「参考：『書籍名』」と末尾に明記します。"
         )
-        refs_note = ""
-
-    system = _base_system(kenjin, past + tetsu_context, role_desc)
-    first  = f"野菜：{vegetable}" + query_instruction + refs_note
-
-    return _call_claude(system, first, chat_history, book_keywords=keywords)
+        system = _base_system(kenjin, past, role_desc)
+        first  = f"野菜：{vegetable}" + query_instruction
+        return _call_claude(system, first, chat_history, book_keywords=keywords)
 
 
 # ── チャット ─────────────────────────────────────────────
