@@ -17,6 +17,8 @@ if "recipe_chat" not in st.session_state:
     st.session_state.recipe_chat = []
 if "recipe_responses" not in st.session_state:
     st.session_state.recipe_responses = []
+if "recipe_use_tetsu" not in st.session_state:
+    st.session_state.recipe_use_tetsu = False
 
 # ── 野菜質問エリア ────────────────────────────────────────
 vegetable_q = st.text_input("知りたい野菜", placeholder="例：にんじん")
@@ -29,9 +31,8 @@ b1, b2 = st.columns([2, 3])
 btn_normal = b1.button("質問する", type="primary", disabled=btn_disabled)
 btn_tetsu  = b2.button("🧑‍🌾 青髪のテツさんに聞く", disabled=btn_disabled)
 
-use_tetsu = btn_tetsu  # どちらのボタンを押したか
-
 if btn_normal or btn_tetsu:
+    st.session_state.recipe_use_tetsu = bool(btn_tetsu)
     st.session_state.recipe_entry = {
         "vegetable":   vegetable_q,
         "recipe_name": "",
@@ -41,10 +42,11 @@ if btn_normal or btn_tetsu:
     }
     st.session_state.recipe_chat      = []
     st.session_state.recipe_responses = []
-    spinner_msg = "青髪のテツさんのブログを調べています…" if use_tetsu else "AI勘ちゃんが調べています…"
+    _use_tetsu = st.session_state.recipe_use_tetsu
+    spinner_msg = "青髪のテツさんのブログを調べています…" if _use_tetsu else "AI勘ちゃんが調べています…"
     with st.spinner(spinner_msg):
         reply = get_ai_response_recipe(
-            st.session_state.recipe_entry, [], query_types=query_types, use_tetsu=use_tetsu)
+            st.session_state.recipe_entry, [], query_types=query_types, use_tetsu=_use_tetsu)
     st.session_state.recipe_responses.append({"role": "assistant", "content": reply})
     st.session_state.recipe_chat.append({"role": "assistant", "content": reply})
     save_recipe_chat_log(vegetable_q, query_types, reply)
@@ -71,7 +73,10 @@ if st.session_state.recipe_entry:
             st.session_state.recipe_chat.append({"role": "user", "content": user_input})
             with st.spinner("勘ちゃんが考えています…"):
                 reply = get_ai_response_recipe(
-                    st.session_state.recipe_entry, st.session_state.recipe_chat)
+                    st.session_state.recipe_entry,
+                    st.session_state.recipe_chat,
+                    use_tetsu=st.session_state.recipe_use_tetsu,
+                )
             st.session_state.recipe_responses.append({"role": "assistant", "content": reply})
             st.session_state.recipe_chat.append({"role": "assistant", "content": reply})
             st.rerun()
