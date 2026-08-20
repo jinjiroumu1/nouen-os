@@ -27,9 +27,18 @@ cb_cols = st.columns(len(QUERY_OPTIONS))
 query_types = [opt for i, opt in enumerate(QUERY_OPTIONS) if cb_cols[i].checkbox(opt)]
 
 btn_disabled = not (vegetable_q and query_types)
+_used_tetsu = st.session_state.recipe_use_tetsu
 b1, b2 = st.columns([2, 3])
-btn_normal = b1.button("質問する", type="primary", disabled=btn_disabled)
-btn_tetsu  = b2.button("🧑‍🌾 青髪のテツさんに聞く", disabled=btn_disabled)
+btn_normal = b1.button(
+    "質問する",
+    type="secondary" if _used_tetsu else "primary",
+    disabled=btn_disabled,
+)
+btn_tetsu = b2.button(
+    "🧑‍🌾 青髪のテツさんに聞く",
+    type="primary" if _used_tetsu else "secondary",
+    disabled=btn_disabled,
+)
 
 if btn_normal or btn_tetsu:
     st.session_state.recipe_use_tetsu = bool(btn_tetsu)

@@ -304,32 +304,68 @@ def _call_claude_with_web_search(system: str, query: str, vegetable: str, query_
         return "（APIキーが設定されていません）"
     search_query = f"青髪のテツ {vegetable} {' '.join(query_types)}"
     user_content = f"{query}\n\n検索クエリ：「{search_query}」"
+    messages = [{"role": "user", "content": user_content}]
+    tools = [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}]
+    tetsu_urls: list[str] = []
+    final_text = ""
     try:
-        resp = claude.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=2048,
-            system=system,
-            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
-            messages=[{"role": "user", "content": user_content}],
-        )
-        # テキストブロックとURL参照を収集
-        text_parts = []
-        urls = []
-        for block in resp.content:
-            if block.type == "text":
-                text_parts.append(block.text)
-            elif block.type == "tool_result":
-                pass
-            elif hasattr(block, "type") and block.type == "web_search_tool_result":
-                if isinstance(block.content, list):
-                    for r in block.content:
-                        if hasattr(r, "url") and r.url:
-                            urls.append(r.url)
-        result = "\n".join(text_parts)
-        tetsu_urls = [u for u in urls if "tetsublog" in u or "tetsu" in u.lower()]
-        if tetsu_urls:
-            result += "\n\n" + "\n".join(f"参考：青髪のテツ（{u}）" for u in tetsu_urls)
-        return result if result.strip() else "青髪のテツの情報を取得できませんでした。"
+        # tool_useが止まるまでループ（最大5ターン）
+        for _ in range(5):
+            resp = claude.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=2048,
+                system=system,
+                tools=tools,
+                messages=messages,
+            )
+            # web_search_tool_result ブロックからURLを収集
+            for block in resp.content:
+                btype = getattr(block, "type", "")
+                if btype == "web_search_tool_result":
+                    content = getattr(block, "content", [])
+                    if isinstance(content, list):
+                        for r in content:
+                            url = getattr(r, "url", None)
+                            if url and "tetsublog" in url:
+                                tetsu_urls.append(url)
+
+            if resp.stop_reason != "tool_use":
+                # 最終ターン：テキストのみ収集（中間メッセージは含まない）
+                final_text = "\n".join(
+                    block.text for block in resp.content
+                    if getattr(block, "type", "") == "text"
+                )
+                break
+
+            # tool_use ブロックをアシスタント側に追加してループ継続
+            messages.append({"role": "assistant", "content": resp.content})
+            # tool_result を user 側に追加
+            tool_results = []
+            for block in resp.content:
+                if getattr(block, "type", "") == "tool_use":
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "",
+                    })
+            if tool_results:
+                messages.append({"role": "user", "content": tool_results})
+
+        # tetsublog.work URLを重複除去
+        seen: set[str] = set()
+        unique_urls = [u for u in tetsu_urls if not (u in seen or seen.add(u))]  # type: ignore[func-returns-value]
+
+        if not final_text.strip():
+            return "青髪のテツの情報を取得できませんでした。"
+
+        # 参考URL付与
+        if unique_urls:
+            links = "\n".join(f"[{u}]({u})" for u in unique_urls)
+            final_text += f"\n\n参考：青髪のテツ\n{links}"
+        else:
+            final_text += "\n\n参考：青髪のテツ（Yahoo!ニュース等の記事より）"
+
+        return final_text
     except Exception as e:
         return f"（青髪のテツ検索エラー：{e}）"
 
