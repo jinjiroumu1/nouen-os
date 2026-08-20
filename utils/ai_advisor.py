@@ -362,17 +362,11 @@ def _call_claude_with_web_search(system: str, query: str, vegetable: str, query_
         if not final_text.strip():
             return "青髪のテツの情報を取得できませんでした。"
 
-        # 中間メッセージ（検索中の案内文）を行単位で除去
-        _noise_patterns = [
-            r'.*検索いたします.*',
-            r'.*見つかりませんでした.*',
-            r'.*もう一度検索.*',
-            r'^お探しですね[^\n]*',
-        ]
-        for pat in _noise_patterns:
-            final_text = _re.sub(pat, '', final_text, flags=_re.MULTILINE)
-        # 除去後の連続空行を整理
-        final_text = _re.sub(r'\n{3,}', '\n\n', final_text).strip()
+        # 【】で始まる最初の行より前の中間メッセージをすべて除去
+        m = _re.search(r'^【', final_text, flags=_re.MULTILINE)
+        if m:
+            final_text = final_text[m.start():]
+        final_text = final_text.strip()
 
         # AIが回答文に「参考：青髪のテツ」を含めてしまった場合は除去
         final_text = _re.sub(r'\n*参考[：:]\s*青髪のテツ[^\n]*', '', final_text).rstrip()
