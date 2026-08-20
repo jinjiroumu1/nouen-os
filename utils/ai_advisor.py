@@ -362,6 +362,18 @@ def _call_claude_with_web_search(system: str, query: str, vegetable: str, query_
         if not final_text.strip():
             return "青髪のテツの情報を取得できませんでした。"
 
+        # 中間メッセージ（検索中の案内文）を行単位で除去
+        _noise_patterns = [
+            r'.*検索いたします.*',
+            r'.*見つかりませんでした.*',
+            r'.*もう一度検索.*',
+            r'^お探しですね[^\n]*',
+        ]
+        for pat in _noise_patterns:
+            final_text = _re.sub(pat, '', final_text, flags=_re.MULTILINE)
+        # 除去後の連続空行を整理
+        final_text = _re.sub(r'\n{3,}', '\n\n', final_text).strip()
+
         # AIが回答文に「参考：青髪のテツ」を含めてしまった場合は除去
         final_text = _re.sub(r'\n*参考[：:]\s*青髪のテツ[^\n]*', '', final_text).rstrip()
 
@@ -406,6 +418,7 @@ def get_ai_response_recipe(
             "ブログ情報をweb検索して回答します。"
             "回答文には参考URLや「参考：」の行、「詳細は～ご確認ください」などの誘導文を含めないでください。"
             "参考情報はシステムが自動付与します。"
+            "見出しは##や###などのMarkdown記法を使わず、【野菜の見分け方】のような【】形式のテキストで記載してください。"
         )
         system = _base_system(kenjin, past, role_desc)
         first  = f"野菜：{vegetable}" + query_instruction
