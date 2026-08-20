@@ -365,12 +365,12 @@ def _call_claude_with_web_search(system: str, query: str, vegetable: str, query_
         # AIが回答文に「参考：青髪のテツ」を含めてしまった場合は除去
         final_text = _re.sub(r'\n*参考[：:]\s*青髪のテツ[^\n]*', '', final_text).rstrip()
 
-        # 参考URL付与（tetsublog.workのみ。なければURLなし表示）
+        # 参考URL付与（tetsublog.workのみ。なければトップページを固定表示）
         if tetsu_urls:
             ref_url = _clean_url(tetsu_urls[0])
-            final_text += f"\n\n参考：青髪のテツ『やさいのトリセツ』{ref_url}"
         else:
-            final_text += "\n\n参考：青髪のテツ（やさいのトリセツより）"
+            ref_url = "https://tetsublog.work/"
+        final_text += f"\n\n参考：青髪のテツ『やさいのトリセツ』{ref_url}"
 
         return final_text
     except Exception as e:
@@ -409,6 +409,9 @@ def get_ai_response_recipe(
             "野菜・料理に関する質問に、青髪のテツ（八百屋歴14年・やさいのトリセツ著者）の"
             "ブログ情報をweb検索して回答します。"
             "回答文には参考URLや「参考：」の行を含めないでください。参考情報はシステムが自動付与します。"
+            "ブログへの誘導を書く場合は"
+            "『詳細は[やさいのトリセツ](https://tetsublog.work/)をご確認ください』"
+            "というMarkdownリンク形式で記載してください。"
         )
         system = _base_system(kenjin, past, role_desc)
         first  = f"野菜：{vegetable}" + query_instruction
