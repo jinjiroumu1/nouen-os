@@ -55,8 +55,10 @@ if st.session_state.recipe_entry:
 
     user_turns = sum(1 for m in st.session_state.recipe_chat if m["role"] == "user")
     if user_turns < MAX_TURNS - 1:
-        user_input = st.chat_input(f"追加の質問（あと{MAX_TURNS - 1 - user_turns}回）")
-        if user_input:
+        with st.form("recipe_followup_form", clear_on_submit=True):
+            user_input = st.text_input(f"追加の質問（あと{MAX_TURNS - 1 - user_turns}回）")
+            submitted = st.form_submit_button("送信")
+        if submitted and user_input:
             st.session_state.recipe_responses.append({"role": "user", "content": user_input})
             st.session_state.recipe_chat.append({"role": "user", "content": user_input})
             with st.spinner("勘ちゃんが考えています…"):
@@ -67,12 +69,6 @@ if st.session_state.recipe_entry:
             st.rerun()
     else:
         st.info("今日の対話はここまで。食べる。循環する。🌱")
-
-    if st.button("対話をリセット"):
-        st.session_state.recipe_entry     = None
-        st.session_state.recipe_chat      = []
-        st.session_state.recipe_responses = []
-        st.rerun()
 
 # ── 過去の質問 ────────────────────────────────────────────
 st.markdown("---")
