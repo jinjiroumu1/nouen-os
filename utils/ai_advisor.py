@@ -312,8 +312,7 @@ def _call_claude_with_web_search(system: str, query: str, vegetable: str, query_
         """末尾の句読点・括弧を除去してURLをクリーンにする。"""
         return _re.sub(r'[）)。、.,\s]+$', '', raw)
 
-    tetsu_urls: list[str] = []   # tetsublog.work のURL
-    all_urls: list[str] = []     # 全URL（フォールバック用）
+    tetsu_urls: list[str] = []   # tetsublog.work のURLのみ収集
     final_text = ""
     try:
         # tool_useが止まるまでループ（最大5ターン）
@@ -336,7 +335,6 @@ def _call_claude_with_web_search(system: str, query: str, vegetable: str, query_
                             if not raw_url:
                                 continue
                             url = _clean_url(raw_url)
-                            all_urls.append(url)
                             if "tetsublog" in url:
                                 tetsu_urls.append(url)
 
@@ -364,15 +362,15 @@ def _call_claude_with_web_search(system: str, query: str, vegetable: str, query_
         if not final_text.strip():
             return "青髪のテツの情報を取得できませんでした。"
 
-        # 参考URL付与（tetsublog.work優先、なければ他の最初の1件）
+        # AIが回答文に「参考：青髪のテツ」を含めてしまった場合は除去
+        final_text = _re.sub(r'\n*参考[：:]\s*青髪のテツ[^\n]*', '', final_text).rstrip()
+
+        # 参考URL付与（tetsublog.workのみ。なければURLなし表示）
         if tetsu_urls:
             ref_url = _clean_url(tetsu_urls[0])
-            final_text += f"\n\n参考：青髪のテツ（{ref_url}）"
-        elif all_urls:
-            ref_url = _clean_url(all_urls[0])
-            final_text += f"\n\n参考：青髪のテツ（{ref_url}）"
+            final_text += f"\n\n参考：青髪のテツ『やさいのトリセツ』{ref_url}"
         else:
-            final_text += "\n\n参考：青髪のテツ（Yahoo!ニュース等の記事より）"
+            final_text += "\n\n参考：青髪のテツ（やさいのトリセツより）"
 
         return final_text
     except Exception as e:
@@ -410,7 +408,7 @@ def get_ai_response_recipe(
         role_desc = (
             "野菜・料理に関する質問に、青髪のテツ（八百屋歴14年・やさいのトリセツ著者）の"
             "ブログ情報をweb検索して回答します。"
-            "回答末尾に参照したURLを「参考：青髪のテツ（URL）」の形式で必ず明記します。"
+            "回答文には参考URLや「参考：」の行を含めないでください。参考情報はシステムが自動付与します。"
         )
         system = _base_system(kenjin, past, role_desc)
         first  = f"野菜：{vegetable}" + query_instruction
