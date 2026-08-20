@@ -24,7 +24,14 @@ st.write("知りたいことを選んでください（複数選択可）")
 cb_cols = st.columns(len(QUERY_OPTIONS))
 query_types = [opt for i, opt in enumerate(QUERY_OPTIONS) if cb_cols[i].checkbox(opt)]
 
-if st.button("質問する", type="primary", disabled=not (vegetable_q and query_types)):
+btn_disabled = not (vegetable_q and query_types)
+b1, b2 = st.columns([2, 3])
+btn_normal = b1.button("質問する", type="primary", disabled=btn_disabled)
+btn_tetsu  = b2.button("🧑‍🌾 青髪のテツさんに聞く", disabled=btn_disabled)
+
+use_tetsu = btn_tetsu  # どちらのボタンを押したか
+
+if btn_normal or btn_tetsu:
     st.session_state.recipe_entry = {
         "vegetable":   vegetable_q,
         "recipe_name": "",
@@ -34,9 +41,10 @@ if st.button("質問する", type="primary", disabled=not (vegetable_q and query
     }
     st.session_state.recipe_chat      = []
     st.session_state.recipe_responses = []
-    with st.spinner("AI勘ちゃんが調べています…"):
+    spinner_msg = "青髪のテツさんのブログを調べています…" if use_tetsu else "AI勘ちゃんが調べています…"
+    with st.spinner(spinner_msg):
         reply = get_ai_response_recipe(
-            st.session_state.recipe_entry, [], query_types=query_types)
+            st.session_state.recipe_entry, [], query_types=query_types, use_tetsu=use_tetsu)
     st.session_state.recipe_responses.append({"role": "assistant", "content": reply})
     st.session_state.recipe_chat.append({"role": "assistant", "content": reply})
     save_recipe_chat_log(vegetable_q, query_types, reply)

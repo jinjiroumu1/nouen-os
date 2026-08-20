@@ -296,63 +296,110 @@ def get_ai_response_cultivation(entry: dict, chat_history: list) -> str:
     return _call_claude(system, f"栽培計画を立てました。\n\n{first}", chat_history, book_keywords=keywords)
 
 
+# ── 青髪のテツ記事取得ヘルパー（use_tetsu=True 時のみ使用） ──
+@st.cache_data(ttl=3600)
+def _fetch_tetsu_rss() -> list[dict]:
+    import requests as _req, xml.etree.ElementTree as _ET
+    try:
+        resp = _req.get("https://tetsublog.work/feed/", timeout=8)
+        resp.raise_for_status()
+        root = _ET.fromstring(resp.content)
+        items = []
+        for item in root.findall(".//item"):
+            t = item.find("title")
+            l = item.find("link")
+            if t is not None and l is not None:
+                items.append({"title": t.text or "", "url": l.text or ""})
+        return items
+    except Exception:
+        return []
+
+
+def _fetch_tetsu_article(url: str) -> str:
+    import requests as _req, re as _re
+    try:
+        resp = _req.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+        html = resp.text
+        m = _re.search(r"<article[^>]*>(.*?)</article>", html, _re.S)
+        target = m.group(1) if m else html
+        text = _re.sub(r"<[^>]+>", "", target)
+        text = _re.sub(r"\s{2,}", "\n", text).strip()
+        return text[:1500]
+    except Exception:
+        return ""
+
+
+def _find_tetsu_articles(keywords: list[str]) -> list[dict]:
+    matched = []
+    for item in _fetch_tetsu_rss():
+        if any(kw and kw.lower() in item["title"].lower() for kw in keywords):
+            matched.append(item)
+        if len(matched) >= 2:
+            break
+    return matched
+
+
 # ── 料理 ─────────────────────────────────────────────────
-def get_ai_response_recipe(entry: dict, chat_history: list, query_types: list | None = None) -> str:
-    kenjin = fetch_page_tree(KENJIN_PAGE_ID, "賢人コーナー")
+def get_ai_response_recipe(
+    entry: dict,
+    chat_history: list,
+    query_types: list | None = None,
+    use_tetsu: bool = False,
+) -> str:
+    kenjin    = fetch_page_tree(KENJIN_PAGE_ID, "賢人コーナー")
     past_page = fetch_page_tree(RECIPE_PAGE_ID, "料理ページ")
     past_db   = _fetch_db_records(RECIPE_DB_ID, "主な野菜", entry.get("vegetable", ""))
-    past = f"{past_page}\n\n【料理レシピDB】\n{past_db}"
+    past      = f"{past_page}\n\n【料理レシピDB】\n{past_db}"
+    keywords  = [k for k in [entry.get("vegetable"), entry.get("recipe_name")] if k]
+    vegetable = entry.get("vegetable", "")
 
-    keywords = [k for k in [entry.get("vegetable"), entry.get("recipe_name")] if k]
+    # ── 青髪のテツモード：tetsublog.work からリアルタイム取得 ──
+    tetsu_context = ""
+    tetsu_refs    = []
+    if use_tetsu:
+        articles = _find_tetsu_articles(keywords)
+        for art in articles:
+            body = _fetch_tetsu_article(art["url"])
+            if body:
+                tetsu_context += f"\n\n【青髪のテツ記事：{art['title']}】\n{body}"
+                tetsu_refs.append(f"参考：青髪のテツ『{art['title']}』 {art['url']}")
 
-    # 回答項目ごとの指示を組み立てる
+    # ── 回答項目ごとの指示 ──
+    qt_label = {
+        "料理を検索":    "【料理を検索】\n対象野菜を使った料理・調理法を回答してください。",
+        "野菜の見分け方": "【野菜の見分け方】\n新鮮な見分け方・品質の確認ポイントを回答してください。",
+        "保存方法":      "【保存方法】\n最適な保存方法・保存期間・保存のコツを回答してください。",
+    }
     if query_types:
-        sections = []
-        for qt in query_types:
-            if qt == "料理を検索":
-                sections.append(
-                    "【料理を検索】\n"
-                    "書籍（添付PDF）または青髪のテツの学習済み知識に基づく料理・調理法を回答してください。"
-                    "青髪のテツの知見を参照した場合は「参考：青髪のテツの知見」と明記してください。"
-                    "書籍・青髪のテツの知見に情報がない場合は「参考文献に該当する情報が見つかりませんでした」と明記してください。"
-                )
-            elif qt == "野菜の見分け方":
-                sections.append(
-                    "【野菜の見分け方】\n"
-                    "青髪のテツ（八百屋歴14年・野菜のプロ）の学習済み知識を優先して回答してください。"
-                    "書籍（添付PDF）も参照してください。"
-                    "青髪のテツの知見を参照した場合は「参考：青髪のテツの知見」と明記してください。"
-                    "情報がない場合は「参考文献に該当する情報が見つかりませんでした」と明記してください。"
-                )
-            elif qt == "保存方法":
-                sections.append(
-                    "【保存方法】\n"
-                    "青髪のテツ（八百屋歴14年・野菜のプロ）の学習済み知識を優先して回答してください。"
-                    "書籍（添付PDF）も参照してください。"
-                    "青髪のテツの知見を参照した場合は「参考：青髪のテツの知見」と明記してください。"
-                    "情報がない場合は「参考文献に該当する情報が見つかりませんでした」と明記してください。"
-                )
-        query_instruction = (
-            "\n\n【回答ルール】\n"
-            "・情報源は書籍（添付PDF）と青髪のテツの学習済み知識のみ使用すること\n"
-            "・tetsublog.workへのアクセスは行わないこと\n"
-            "・Claudeの一般知識（書籍・青髪のテツ以外）は使用しないこと\n"
-            "・以下の各セクションに分けて回答すること\n\n"
-            + "\n\n".join(sections)
-        )
+        sections = [qt_label[qt] for qt in query_types if qt in qt_label]
+        query_instruction = "\n\n【各セクションに分けて回答してください】\n\n" + "\n\n".join(sections)
     else:
         query_instruction = ""
 
-    system = _base_system(kenjin, past,
-        "野菜・料理に関する質問に答えます。"
-        "情報源は書籍（添付PDF）と青髪のテツ（八百屋歴14年・野菜のプロ）の学習済み知識のみ使用します。"
-        "tetsublog.workへのアクセスは行いません。"
-        "青髪のテツの知見を参照した場合は「参考：青髪のテツの知見」と回答末尾に明記します。"
-        "書籍を参照した場合は「参考：『書籍名』」と明記します。"
-        "書籍・青髪のテツの知見に情報がない場合は「参考文献に該当する情報が見つかりませんでした」と明記します。")
+    # ── システムプロンプト・回答末尾指示の組み立て ──
+    if use_tetsu:
+        role_desc = (
+            "野菜・料理に関する質問に、青髪のテツ（八百屋歴14年・やさいのトリセツ著者）の"
+            "ブログ記事を元に回答します。"
+            "回答末尾に必ず参照した記事のURLを「参考：青髪のテツ『記事タイトル』URL」の形式で明記します。"
+            "記事に情報がない場合は「青髪のテツの記事に該当する情報が見つかりませんでした」と明記します。"
+        )
+        refs_note = (
+            ("\n\n【重要】回答末尾に以下の参照記事を必ずそのまま記載してください：\n" + "\n".join(tetsu_refs))
+            if tetsu_refs else
+            "\n\n青髪のテツの記事に該当情報が見つかりませんでした。その旨を回答に明記してください。"
+        )
+    else:
+        role_desc = (
+            "野菜・料理に関する質問に、AIの学習知識で回答します。"
+            "回答の冒頭に「※ AIの一般知識による回答です」と明記します。"
+            "書籍（添付PDF）を参照した場合は「参考：『書籍名』」と末尾に明記します。"
+        )
+        refs_note = ""
 
-    vegetable = entry.get("vegetable", "")
-    first = f"野菜：{vegetable}" + query_instruction
+    system = _base_system(kenjin, past + tetsu_context, role_desc)
+    first  = f"野菜：{vegetable}" + query_instruction + refs_note
 
     return _call_claude(system, first, chat_history, book_keywords=keywords)
 
